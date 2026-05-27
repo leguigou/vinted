@@ -27,6 +27,14 @@ ADMIN_USERNAME = os.environ.get("VINTED_ALERTS_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD_ENV = os.environ.get("VINTED_ALERTS_ADMIN_PASSWORD")
 ADMIN_PASSWORD = ADMIN_PASSWORD_ENV or "admin123"
 SESSION_COOKIE = "vinted_session"
+FETCH_API_ENABLED = os.environ.get("VINTED_ALERTS_FETCH_API_ENABLED", "").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+FETCH_API_URL = os.environ.get("VINTED_ALERTS_FETCH_API_URL", "").rstrip("/")
+FETCH_API_TOKEN = os.environ.get("VINTED_ALERTS_FETCH_API_TOKEN", "")
 
 
 VINTED_HEADERS = {
@@ -374,6 +382,10 @@ def http_json(url: str, headers: dict[str, str], opener=None) -> dict:
 def fetch_vinted_items(search_url: str) -> list[dict]:
     api_url = search_url_to_api_url(search_url)
     data = fetch_vinted_json(api_url)
+    return normalize_vinted_items(data)
+
+
+def normalize_vinted_items(data: dict) -> list[dict]:
     items = data.get("items", [])
     normalized = []
 
@@ -411,6 +423,47 @@ def fetch_vinted_items(search_url: str) -> list[dict]:
 
 
 def fetch_vinted_json(api_url: str) -> dict:
+    if FETCH_API_ENABLED:
+        return fetch_vinted_json_from_api(api_url)
+    return fetch_vinted_json_direct(api_url)
+
+
+def fetch_vinted_json_from_api(api_url: str) -> dict:
+    if not FETCH_API_URL:
+        raise RuntimeError("VINTED_ALERTS_FETCH_API_URL est obligatoire quand l'API de fetch est active.")
+    if not FETCH_API_TOKEN:
+        raise RuntimeError("VINTED_ALERTS_FETCH_API_TOKEN est obligatoire quand l'API de fetch est active.")
+
+    payload = json.dumps({"url": api_url}).encode("utf-8")
+    request = urllib.request.Request(
+        f"{FETCH_API_URL}/api/vinted/json",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {FETCH_API_TOKEN}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            data = json.loads(response.read().decode(charset))
+    except urllib.error.HTTPError as exc:
+        detail = read_http_error(exc)
+        raise RuntimeError(f"API fetch HTTP {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"API fetch inaccessible: {exc.reason}") from exc
+
+    if not data.get("ok"):
+        raise RuntimeError(str(data.get("error") or "Erreur inconnue de l'API fetch."))
+    result = data.get("data")
+    if not isinstance(result, dict):
+        raise RuntimeError("Réponse invalide de l'API fetch.")
+    return result
+
+
+def fetch_vinted_json_direct(api_url: str) -> dict:
     with vinted_lock:
         if not any(True for _ in vinted_cookie_jar):
             warm_vinted_session()

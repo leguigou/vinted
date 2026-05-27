@@ -39,6 +39,79 @@ Variables d'environnement utiles :
 - `VINTED_ALERTS_DB_PATH` : chemin de la base SQLite.
 - `VINTED_ALERTS_ADMIN_USERNAME` : utilisateur admin cible, par defaut `admin`.
 - `VINTED_ALERTS_ADMIN_PASSWORD` : mot de passe admin. Si la variable est definie, elle est appliquee au demarrage.
+- `VINTED_ALERTS_FETCH_API_ENABLED` : active l'appel a une API distante pour les requetes Vinted (`true`, `1`, `yes` ou `on`).
+- `VINTED_ALERTS_FETCH_API_URL` : URL du service API de fetch, par exemple `https://maison.example.com:8797`.
+- `VINTED_ALERTS_FETCH_API_TOKEN` : token Bearer partage avec le service API de fetch.
+
+## API de fetch Vinted separee
+
+Le script `vinted_fetch_api.py` lance un petit service HTTP independant de l'extranet. Il sert a recevoir une demande depuis un VPS, puis a interroger Vinted depuis la machine qui heberge ce service. C'est donc l'IP de cette machine, par exemple ton ordinateur ou un Raspberry Pi a la maison, qui sera vue par Vinted.
+
+Le service expose :
+
+- `GET /health` : verification simple que le service tourne.
+- `POST /api/vinted/json` : appelle l'API catalogue Vinted et renvoie le JSON brut. Le body doit contenir `{"url":"https://www.vinted.fr/..."}` ou une URL API `/api/v2/catalog/items`.
+
+Protection :
+
+- Le header `Authorization: Bearer TON_TOKEN` est obligatoire.
+- Le service refuse les URLs qui ne pointent pas vers `https://*.vinted.fr/api/v2/catalog/items`.
+- Si le service est expose sur Internet, mets de preference un reverse proxy HTTPS devant lui et limite l'acces au port dans ton pare-feu.
+
+### Lancer le service API a la maison
+
+Windows PowerShell :
+
+```powershell
+$env:VINTED_FETCH_API_TOKEN = "un-token-long-et-secret"
+$env:VINTED_FETCH_API_HOST = "0.0.0.0"
+$env:VINTED_FETCH_API_PORT = "8797"
+python vinted_fetch_api.py
+```
+
+Ou avec le lanceur Windows :
+
+```powershell
+$env:VINTED_FETCH_API_TOKEN = "un-token-long-et-secret"
+.\start-fetch-api.bat
+```
+
+Linux / Raspberry Pi :
+
+```bash
+export VINTED_FETCH_API_TOKEN="un-token-long-et-secret"
+export VINTED_FETCH_API_HOST="0.0.0.0"
+export VINTED_FETCH_API_PORT="8797"
+python3 vinted_fetch_api.py
+```
+
+Ou avec le lanceur Linux :
+
+```bash
+chmod +x start-fetch-api.sh
+export VINTED_FETCH_API_TOKEN="un-token-long-et-secret"
+./start-fetch-api.sh
+```
+
+### Configurer l'extranet sur le VPS
+
+Sur le serveur qui lance `app.py`, active la delegation :
+
+```bash
+export VINTED_ALERTS_FETCH_API_ENABLED=true
+export VINTED_ALERTS_FETCH_API_URL="https://maison.example.com:8797"
+export VINTED_ALERTS_FETCH_API_TOKEN="un-token-long-et-secret"
+python3 app.py
+```
+
+Sous PowerShell :
+
+```powershell
+$env:VINTED_ALERTS_FETCH_API_ENABLED = "true"
+$env:VINTED_ALERTS_FETCH_API_URL = "https://maison.example.com:8797"
+$env:VINTED_ALERTS_FETCH_API_TOKEN = "un-token-long-et-secret"
+python app.py
+```
 
 ## Connexion Telegram etape par etape
 
