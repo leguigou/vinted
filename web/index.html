@@ -8,22 +8,25 @@
   </head>
   <body>
     <main id="loginShell" class="shell authShell">
-      <section class="panel authPanel">
-        <h1>Vinted Alerts</h1>
-        <p>Connecte-toi pour acceder a tes recherches et a ton bot Telegram.</p>
-        <form id="loginForm" class="stack">
-          <label>
-            Utilisateur
-            <input name="username" autocomplete="username" value="admin" required />
-          </label>
-          <label>
-            Mot de passe
-            <input name="password" type="password" autocomplete="current-password" required />
-          </label>
-          <button type="submit">Connexion</button>
-          <div id="loginError" class="help error"></div>
-        </form>
-      </section>
+      <div class="authStack">
+        <section class="panel authPanel">
+          <h1>Vinted Alerts</h1>
+          <p>Connecte-toi pour acceder a tes recherches et a ton bot Telegram.</p>
+          <form id="loginForm" class="stack">
+            <label>
+              Utilisateur
+              <input name="username" autocomplete="username" value="admin" required />
+            </label>
+            <label>
+              Mot de passe
+              <input name="password" type="password" autocomplete="current-password" required />
+            </label>
+            <button type="submit">Connexion</button>
+            <div id="loginError" class="help error"></div>
+          </form>
+        </section>
+        <small class="appVersion">Version 1.0.1</small>
+      </div>
     </main>
 
     <main id="appShell" class="appLayout" hidden>
@@ -57,6 +60,10 @@
               <span id="userAvatar" class="userAvatar">?</span>
               <span id="currentUser"></span>
             </div>
+            <button id="themeToggle" class="themeToggle" type="button" aria-pressed="false" title="Changer de theme">
+              <span class="themeIcon" aria-hidden="true"></span>
+              <span id="themeToggleText">Theme sombre</span>
+            </button>
             <button id="logout" type="button">Deconnexion</button>
             <button id="checkNow" class="primary">Verifier maintenant</button>
           </div>
@@ -74,6 +81,19 @@
               <small id="accountStatus"></small>
             </div>
           </div>
+          <button id="accountPasswordToggle" class="linkButton accountPasswordToggle" type="button">
+            <span class="lockIcon" aria-hidden="true"></span>
+            Modifier le mot de passe
+          </button>
+          <form id="accountPasswordForm" class="passwordForm accountPasswordForm" hidden>
+            <label>
+              Nouveau mot de passe
+              <input name="password" type="password" minlength="6" autocomplete="new-password" required />
+            </label>
+            <button type="submit">Modifier</button>
+            <button id="accountPasswordCancel" type="button">Annuler</button>
+            <small id="accountPasswordMessage"></small>
+          </form>
         </section>
 
         <section id="adminPanel" class="panel viewPanel" data-panel="users" hidden>

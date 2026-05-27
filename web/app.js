@@ -12,6 +12,18 @@ let itemsPage = 1;
 let isAuthenticated = false;
 let activeView = "account";
 
+function applyTheme(theme) {
+  const activeTheme = theme === "dark" ? "dark" : "light";
+  document.body.dataset.theme = activeTheme;
+  localStorage.setItem("vinted_theme", activeTheme);
+
+  const toggle = $("#themeToggle");
+  if (!toggle) return;
+  const isDark = activeTheme === "dark";
+  toggle.setAttribute("aria-pressed", String(isDark));
+  $("#themeToggleText").textContent = isDark ? "Theme clair" : "Theme sombre";
+}
+
 async function api(path, options = {}) {
   const token = localStorage.getItem("vinted_session_token");
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
@@ -363,6 +375,12 @@ $("#menuToggle").addEventListener("click", () => {
   $("#menuToggle").setAttribute("aria-expanded", String(!collapsed));
 });
 
+$("#themeToggle").addEventListener("click", () => {
+  const nextTheme = document.body.dataset.theme === "dark" ? "light" : "dark";
+  applyTheme(nextTheme);
+});
+
+applyTheme(localStorage.getItem("vinted_theme"));
 syncMenuForViewport();
 
 $("#loginForm").addEventListener("submit", async (event) => {
@@ -397,6 +415,47 @@ $("#userForm").addEventListener("submit", async (event) => {
     await loadState();
   } catch (exception) {
     error.textContent = exception.message;
+  }
+});
+
+$("#accountPasswordToggle").addEventListener("click", () => {
+  const form = $("#accountPasswordForm");
+  const message = $("#accountPasswordMessage");
+  form.hidden = false;
+  $("#accountPasswordToggle").hidden = true;
+  message.textContent = "";
+  message.classList.remove("error");
+  form.querySelector('input[name="password"]').focus();
+});
+
+$("#accountPasswordCancel").addEventListener("click", () => {
+  const form = $("#accountPasswordForm");
+  const message = $("#accountPasswordMessage");
+  form.reset();
+  form.hidden = true;
+  $("#accountPasswordToggle").hidden = false;
+  message.textContent = "";
+  message.classList.remove("error");
+});
+
+$("#accountPasswordForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const message = $("#accountPasswordMessage");
+  message.textContent = "";
+  message.classList.remove("error");
+  try {
+    await api("/api/account/password", {
+      method: "POST",
+      body: JSON.stringify(formData(form)),
+    });
+    form.reset();
+    form.hidden = true;
+    $("#accountPasswordToggle").hidden = false;
+    message.textContent = "Mot de passe modifiÃ©.";
+  } catch (exception) {
+    message.textContent = exception.message;
+    message.classList.add("error");
   }
 });
 

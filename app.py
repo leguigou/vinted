@@ -732,6 +732,10 @@ class Handler(BaseHTTPRequestHandler):
                 user = self.require_user()
                 save_settings(user["id"], payload)
                 self.send_json({"ok": True})
+            elif parsed.path == "/api/account/password":
+                user = self.require_user()
+                update_account_password(user["id"], self.session_token(), payload)
+                self.send_json({"ok": True})
             elif parsed.path == "/api/searches":
                 user = self.require_user()
                 create_search(user["id"], payload)
@@ -950,6 +954,23 @@ def update_user_password(user_id: int, payload: dict) -> None:
         if cursor.rowcount == 0:
             raise RuntimeError("Utilisateur introuvable.")
         conn.execute("delete from sessions where user_id = ?", (user_id,))
+
+
+def update_account_password(user_id: int, session_token: str, payload: dict) -> None:
+    password = str(payload.get("password", "")).strip()
+    if len(password) < 6:
+        raise RuntimeError("Mot de passe: 6 caractÃ¨res minimum.")
+    with db() as conn:
+        cursor = conn.execute(
+            "update users set password_hash = ? where id = ?",
+            (hash_password(password), user_id),
+        )
+        if cursor.rowcount == 0:
+            raise RuntimeError("Utilisateur introuvable.")
+        conn.execute(
+            "delete from sessions where user_id = ? and token <> ?",
+            (user_id, session_token),
+        )
 
 
 def authenticate(username: str, password: str) -> dict | None:
