@@ -22,7 +22,7 @@ python app.py
 
 Tu peux aussi lancer l'application avec `start.bat` ou `run.bat` sous Windows.
 
-Par defaut, le compte initial est `admin` / `admin123`. Change ce mot de passe avec `VINTED_ALERTS_ADMIN_PASSWORD` avant le premier lancement si l'application est exposee ailleurs que sur ton poste.
+Par defaut, le compte admin est `admin` / `admin123`. Si `VINTED_ALERTS_ADMIN_PASSWORD` est definie au demarrage, elle cree ou remet a jour le mot de passe du compte admin cible.
 
 ## Lancement avec Docker
 
@@ -37,8 +37,8 @@ Variables d'environnement utiles :
 - `VINTED_ALERTS_HOST` : adresse d'ecoute, par defaut `127.0.0.1`.
 - `VINTED_ALERTS_PORT` : port HTTP, par defaut `8787`.
 - `VINTED_ALERTS_DB_PATH` : chemin de la base SQLite.
-- `VINTED_ALERTS_ADMIN_USERNAME` : utilisateur admin initial, par defaut `admin`.
-- `VINTED_ALERTS_ADMIN_PASSWORD` : mot de passe admin initial, par defaut `admin123`.
+- `VINTED_ALERTS_ADMIN_USERNAME` : utilisateur admin cible, par defaut `admin`.
+- `VINTED_ALERTS_ADMIN_PASSWORD` : mot de passe admin. Si la variable est definie, elle est appliquee au demarrage.
 
 ## Connexion Telegram etape par etape
 

@@ -10,7 +10,7 @@
     <main id="loginShell" class="shell authShell">
       <section class="panel authPanel">
         <h1>Vinted Alerts</h1>
-        <p>Connecte-toi pour accéder à tes recherches et à ton bot Telegram.</p>
+        <p>Connecte-toi pour acceder a tes recherches et a ton bot Telegram.</p>
         <form id="loginForm" class="stack">
           <label>
             Utilisateur
@@ -26,46 +26,82 @@
       </section>
     </main>
 
-    <main id="appShell" class="shell" hidden>
-      <header class="topbar">
-        <div>
-          <h1>Vinted Alerts</h1>
-          <p>Surveillance locale de recherches Vinted avec notifications Telegram.</p>
+    <main id="appShell" class="appLayout" hidden>
+      <aside id="sideMenu" class="sideMenu">
+        <div class="sideBrand">
+          <strong>Vinted Alerts</strong>
+          <button id="menuToggle" class="iconButton" type="button" aria-label="Menu" aria-expanded="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
         </div>
-        <div class="topActions">
-          <span id="currentUser" class="muted"></span>
-          <button id="logout" type="button">Déconnexion</button>
-          <button id="checkNow" class="primary">Vérifier maintenant</button>
-        </div>
-      </header>
+        <nav class="sideNav" aria-label="Navigation principale">
+          <button class="navItem active" type="button" data-view="account">Mon compte</button>
+          <button class="navItem" type="button" data-view="users">Utilisateurs</button>
+          <button class="navItem" type="button" data-view="telegram">Telegram</button>
+          <button class="navItem" type="button" data-view="new-search">Nouvelle recherche</button>
+          <button class="navItem" type="button" data-view="searches">Recherches actives</button>
+          <button class="navItem" type="button" data-view="items">Derniers articles</button>
+        </nav>
+      </aside>
 
-      <section id="adminPanel" class="panel" hidden>
-        <div class="sectionTitle">
-          <h2>Utilisateurs</h2>
-          <span id="usersSummary" class="muted"></span>
-        </div>
-        <form id="userForm" class="userForm">
-          <label>
-            Utilisateur
-            <input name="username" required />
-          </label>
-          <label>
-            Mot de passe
-            <input name="password" type="password" required />
-          </label>
-          <label class="checkboxLabel">
-            <input name="is_admin" type="checkbox" />
-            Admin
-          </label>
-          <button type="submit">Créer</button>
-          <small id="userError"></small>
-        </form>
-        <div id="users" class="list compactList"></div>
-      </section>
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <h1 id="viewTitle">Mon compte</h1>
+            <p>Surveillance locale de recherches Vinted avec notifications Telegram.</p>
+          </div>
+          <div class="topActions">
+            <div class="userBadge" title="Utilisateur connecte">
+              <span id="userAvatar" class="userAvatar">?</span>
+              <span id="currentUser"></span>
+            </div>
+            <button id="logout" type="button">Deconnexion</button>
+            <button id="checkNow" class="primary">Verifier maintenant</button>
+          </div>
+        </header>
 
-      <section class="grid">
-        <article class="panel">
-          <h2>Connexion Telegram</h2>
+        <section id="accountPanel" class="panel viewPanel active" data-panel="account">
+          <div class="sectionTitle">
+            <h2>Mon compte</h2>
+            <span id="accountRole" class="muted"></span>
+          </div>
+          <div class="accountSummary">
+            <span id="accountAvatar" class="userAvatar">?</span>
+            <div>
+              <strong id="accountUsername"></strong>
+              <small id="accountStatus"></small>
+            </div>
+          </div>
+        </section>
+
+        <section id="adminPanel" class="panel viewPanel" data-panel="users" hidden>
+          <div class="sectionTitle">
+            <h2>Utilisateurs</h2>
+            <span id="usersSummary" class="muted"></span>
+          </div>
+          <form id="userForm" class="userForm">
+            <label>
+              Utilisateur
+              <input name="username" required />
+            </label>
+            <label>
+              Mot de passe
+              <input name="password" type="password" required />
+            </label>
+            <label class="checkboxLabel">
+              <input name="is_admin" type="checkbox" />
+              Admin
+            </label>
+            <button type="submit">Creer</button>
+            <small id="userError"></small>
+          </form>
+          <div id="users" class="list compactList"></div>
+        </section>
+
+        <section class="panel viewPanel" data-panel="telegram">
+          <h2>Telegram</h2>
           <form id="settingsForm" class="stack">
             <label>
               Token du bot
@@ -82,9 +118,9 @@
             </div>
           </form>
           <div id="telegramHelp" class="help"></div>
-        </article>
+        </section>
 
-        <article class="panel">
+        <section class="panel viewPanel" data-panel="new-search">
           <h2>Nouvelle recherche</h2>
           <form id="searchForm" class="stack">
             <label>
@@ -101,28 +137,28 @@
             </label>
             <button type="submit">Ajouter la recherche</button>
           </form>
-        </article>
-      </section>
+        </section>
 
-      <section class="panel">
-        <div class="sectionTitle">
-          <h2>Recherches actives</h2>
-          <span id="status" class="muted"></span>
-        </div>
-        <div id="searches" class="list"></div>
-      </section>
+        <section class="panel viewPanel" data-panel="searches">
+          <div class="sectionTitle">
+            <h2>Recherches actives</h2>
+            <span id="status" class="muted"></span>
+          </div>
+          <div id="searches" class="list"></div>
+        </section>
 
-      <section class="panel">
-        <div class="sectionTitle">
-          <h2>Derniers articles détectés</h2>
-          <span id="itemsSummary" class="muted"></span>
-        </div>
-        <div id="items" class="items"></div>
-        <div id="itemsPagination" class="pagination" hidden>
-          <button type="button" id="itemsPrev">Précédent</button>
-          <span id="itemsPage" class="muted"></span>
-          <button type="button" id="itemsNext">Suivant</button>
-        </div>
+        <section class="panel viewPanel" data-panel="items">
+          <div class="sectionTitle">
+            <h2>Derniers articles detectes</h2>
+            <span id="itemsSummary" class="muted"></span>
+          </div>
+          <div id="items" class="items"></div>
+          <div id="itemsPagination" class="pagination" hidden>
+            <button type="button" id="itemsPrev">Precedent</button>
+            <span id="itemsPage" class="muted"></span>
+            <button type="button" id="itemsNext">Suivant</button>
+          </div>
+        </section>
       </section>
     </main>
 

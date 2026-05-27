@@ -24,7 +24,8 @@ HOST = os.environ.get("VINTED_ALERTS_HOST", "127.0.0.1")
 PORT = int(os.environ.get("VINTED_ALERTS_PORT", "8787"))
 DEFAULT_INTERVAL_SECONDS = 180
 ADMIN_USERNAME = os.environ.get("VINTED_ALERTS_ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.environ.get("VINTED_ALERTS_ADMIN_PASSWORD", "admin123")
+ADMIN_PASSWORD_ENV = os.environ.get("VINTED_ALERTS_ADMIN_PASSWORD")
+ADMIN_PASSWORD = ADMIN_PASSWORD_ENV or "admin123"
 SESSION_COOKIE = "vinted_session"
 
 
@@ -144,12 +145,16 @@ def init_db() -> None:
             );
 
             create table if not exists settings (
-                key text primary key,
-                value text not null
+                user_id integer not null,
+                key text not null,
+                value text not null,
+                primary key(user_id, key),
+                foreign key(user_id) references users(id) on delete cascade
             );
 
             create table if not exists searches (
                 id integer primary key autoincrement,
+                user_id integer not null,
                 name text not null,
                 url text not null,
                 enabled integer not null default 1,
@@ -160,7 +165,8 @@ def init_db() -> None:
             );
 
             create table if not exists seen_items (
-                item_id text primary key,
+                id integer primary key autoincrement,
+                item_id text not null,
                 search_id integer not null,
                 title text not null,
                 price text,
@@ -168,6 +174,7 @@ def init_db() -> None:
                 photo_url text,
                 created_at text not null,
                 notified_at text,
+                unique(search_id, item_id),
                 foreign key(search_id) references searches(id) on delete cascade
             );
             """
@@ -179,6 +186,11 @@ def init_db() -> None:
 def ensure_admin_user(conn: sqlite3.Connection) -> int:
     row = conn.execute("select id from users where username = ?", (ADMIN_USERNAME,)).fetchone()
     if row:
+        if ADMIN_PASSWORD_ENV:
+            conn.execute(
+                "update users set password_hash = ?, is_admin = 1 where id = ?",
+                (hash_password(ADMIN_PASSWORD_ENV), int(row["id"])),
+            )
         return int(row["id"])
     cursor = conn.execute(
         """
@@ -220,7 +232,7 @@ def migrate_multi_user_schema(conn: sqlite3.Connection) -> None:
     searches_columns = table_columns(conn, "searches")
     if "user_id" not in searches_columns:
         conn.execute("alter table searches add column user_id integer")
-        conn.execute("update searches set user_id = ? where user_id is null", (admin_id,))
+    conn.execute("update searches set user_id = ? where user_id is null", (admin_id,))
 
     seen_columns = table_columns(conn, "seen_items")
     if "id" not in seen_columns:
@@ -706,7 +718,11 @@ class Handler(BaseHTTPRequestHandler):
                     raise RuntimeError("Identifiants invalides.")
                 token = create_session(user["id"])
                 self.send_json(
-                    {"ok": True, "user": {"username": user["username"], "is_admin": bool(user["is_admin"])}},
+                    {
+                        "ok": True,
+                        "token": token,
+                        "user": {"username": user["username"], "is_admin": bool(user["is_admin"])},
+                    },
                     headers={"Set-Cookie": self.session_cookie(token)},
                 )
             elif parsed.path == "/api/logout":
@@ -726,6 +742,11 @@ class Handler(BaseHTTPRequestHandler):
                     raise PermissionError("Accès admin requis.")
                 create_user(payload)
                 self.send_json({"ok": True})
+            elif parsed.path.startswith("/api/users/"):
+                user = self.require_user()
+                if not user["is_admin"]:
+                    raise PermissionError("Accès admin requis.")
+                self.update_user(parsed.path, payload)
             elif parsed.path.startswith("/api/searches/"):
                 user = self.require_user()
                 self.update_search(user, parsed.path, payload)
@@ -751,6 +772,7 @@ class Handler(BaseHTTPRequestHandler):
         data = path.read_bytes()
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -759,6 +781,7 @@ class Handler(BaseHTTPRequestHandler):
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(data)))
         for key, value in (headers or {}).items():
             self.send_header(key, value)
@@ -772,6 +795,10 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length).decode("utf-8"))
 
     def session_token(self) -> str:
+        authorization = self.headers.get("Authorization", "")
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() == "bearer" and token:
+            return token
         cookies = self.headers.get("Cookie", "")
         for part in cookies.split(";"):
             name, _, value = part.strip().partition("=")
@@ -815,6 +842,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif action == "save":
             update_search_settings(user["id"], search_id, payload)
+            self.send_json({"ok": True})
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
+
+    def update_user(self, path: str, payload: dict) -> None:
+        parts = path.strip("/").split("/")
+        user_id = int(parts[2])
+        action = parts[3] if len(parts) > 3 else ""
+        if action == "password":
+            update_user_password(user_id, payload)
             self.send_json({"ok": True})
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -899,6 +936,20 @@ def create_user(payload: dict) -> None:
             )
         except sqlite3.IntegrityError as exc:
             raise RuntimeError("Cet utilisateur existe déjà.") from exc
+
+ 
+def update_user_password(user_id: int, payload: dict) -> None:
+    password = str(payload.get("password", "")).strip()
+    if len(password) < 6:
+        raise RuntimeError("Mot de passe: 6 caractères minimum.")
+    with db() as conn:
+        cursor = conn.execute(
+            "update users set password_hash = ? where id = ?",
+            (hash_password(password), user_id),
+        )
+        if cursor.rowcount == 0:
+            raise RuntimeError("Utilisateur introuvable.")
+        conn.execute("delete from sessions where user_id = ?", (user_id,))
 
 
 def authenticate(username: str, password: str) -> dict | None:
