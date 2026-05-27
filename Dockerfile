@@ -1,0 +1,18 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV VINTED_ALERTS_HOST=0.0.0.0
+ENV VINTED_ALERTS_PORT=8787
+ENV VINTED_ALERTS_DB_PATH=/data/vinted_alerts.db
+
+WORKDIR /app
+
+COPY app.py ./
+COPY web ./web
+
+RUN mkdir -p /data
+
+EXPOSE 8787
+
+CMD ["python", "app.py"]

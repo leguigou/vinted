@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+vinted_alerts.db
+*.log

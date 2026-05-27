@@ -1,0 +1,16 @@
+services:
+  vinted-alerts:
+    build: .
+    container_name: vinted-alerts
+    restart: unless-stopped
+    environment:
+      VINTED_ALERTS_HOST: 0.0.0.0
+      VINTED_ALERTS_PORT: 8787
+      VINTED_ALERTS_DB_PATH: /data/vinted_alerts.db
+    volumes:
+      - vinted-alerts-data:/data
+    ports:
+      - "8787:8787"
+
+volumes:
+  vinted-alerts-data:
