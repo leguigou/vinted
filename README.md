@@ -41,7 +41,7 @@ Variables d'environnement utiles :
 - `VINTED_ALERTS_ADMIN_PASSWORD` : mot de passe admin. Si la variable est definie, elle est appliquee au demarrage.
 - `VINTED_ALERTS_FETCH_API_ENABLED` : active l'appel a une API distante pour les requetes Vinted (`true`, `1`, `yes` ou `on`).
 - `VINTED_ALERTS_FETCH_API_URL` : URL du service API de fetch, par exemple `https://maison.example.com:8797`.
-- `VINTED_ALERTS_FETCH_API_TOKEN` : token Bearer partage avec le service API de fetch.
+- `VINTED_ALERTS_FETCH_API_TOKEN` : token Bearer partage avec le service API de fetch. `VINTED_FETCH_API_TOKEN` est aussi accepte comme alias cote extranet.
 
 ## API de fetch Vinted separee
 

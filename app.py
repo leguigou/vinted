@@ -34,7 +34,10 @@ FETCH_API_ENABLED = os.environ.get("VINTED_ALERTS_FETCH_API_ENABLED", "").lower(
     "on",
 }
 FETCH_API_URL = os.environ.get("VINTED_ALERTS_FETCH_API_URL", "").rstrip("/")
-FETCH_API_TOKEN = os.environ.get("VINTED_ALERTS_FETCH_API_TOKEN", "")
+FETCH_API_TOKEN = (
+    os.environ.get("VINTED_ALERTS_FETCH_API_TOKEN", "")
+    or os.environ.get("VINTED_FETCH_API_TOKEN", "")
+)
 
 
 VINTED_HEADERS = {
@@ -432,7 +435,10 @@ def fetch_vinted_json_from_api(api_url: str) -> dict:
     if not FETCH_API_URL:
         raise RuntimeError("VINTED_ALERTS_FETCH_API_URL est obligatoire quand l'API de fetch est active.")
     if not FETCH_API_TOKEN:
-        raise RuntimeError("VINTED_ALERTS_FETCH_API_TOKEN est obligatoire quand l'API de fetch est active.")
+        raise RuntimeError(
+            "VINTED_ALERTS_FETCH_API_TOKEN est obligatoire quand l'API de fetch est active "
+            "(ou VINTED_FETCH_API_TOKEN comme alias)."
+        )
 
     payload = json.dumps({"url": api_url}).encode("utf-8")
     request = urllib.request.Request(
