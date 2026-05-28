@@ -72,9 +72,18 @@ python vinted_fetch_api.py
 Ou avec le lanceur Windows :
 
 ```powershell
-$env:VINTED_FETCH_API_TOKEN = "un-token-long-et-secret"
 .\start-fetch-api.bat
 ```
+
+Le lanceur Windows charge automatiquement `fetch-api.env` si le fichier existe. Copie `fetch-api.env.example` vers `fetch-api.env`, puis renseigne les valeurs :
+
+```text
+VINTED_FETCH_API_TOKEN=un-token-long-et-secret
+VINTED_FETCH_API_HOST=0.0.0.0
+VINTED_FETCH_API_PORT=8797
+```
+
+Le fichier `fetch-api.env` contient ton secret local et n'est pas versionne par Git.
 
 Linux / Raspberry Pi :
 

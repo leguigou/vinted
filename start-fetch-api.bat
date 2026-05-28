@@ -1,5 +1,15 @@
 @echo off
+setlocal
 cd /d "%~dp0"
+
+if exist "fetch-api.env" (
+  for /f "usebackq eol=# tokens=1,* delims==" %%A in ("fetch-api.env") do (
+    if not "%%A"=="" set "%%A=%%B"
+  )
+) else (
+  echo Fichier fetch-api.env introuvable. Tu peux copier fetch-api.env.example puis renseigner le token.
+  echo.
+)
 
 if "%VINTED_FETCH_API_TOKEN%"=="" (
   echo Definis VINTED_FETCH_API_TOKEN avant de lancer ce service.
