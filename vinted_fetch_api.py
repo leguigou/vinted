@@ -13,7 +13,7 @@ import app
 
 
 ROOT = Path(__file__).resolve().parent
-SERVER_VERSION = "1.0.7"
+SERVER_VERSION = "1.0.8"
 HOST = os.environ.get("VINTED_FETCH_API_HOST", "127.0.0.1")
 PORT = int(os.environ.get("VINTED_FETCH_API_PORT", "8797"))
 ACCESS_TOKEN = os.environ.get("VINTED_FETCH_API_TOKEN", "")
