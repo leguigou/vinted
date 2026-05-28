@@ -491,13 +491,30 @@ def fetch_vinted_json_direct(api_url: str) -> dict:
 def read_http_error(exc: urllib.error.HTTPError) -> str:
     charset = exc.headers.get_content_charset() or "utf-8"
     raw = exc.read().decode(charset, errors="replace").strip()
+    content_type = exc.headers.get("Content-Type", "").lower()
     if not raw:
-        return exc.reason or "Erreur HTTP"
+        return http_status_message(exc.code, exc.reason)
+    if "html" in content_type or raw.lower().startswith(("<!doctype html", "<html")):
+        return http_status_message(exc.code, exc.reason)
     try:
         data = json.loads(raw)
-        return data.get("message") or data.get("error") or raw[:500]
+        detail = data.get("message") or data.get("error")
+        return str(detail) if detail else http_status_message(exc.code, exc.reason)
     except json.JSONDecodeError:
+        if "<html" in raw.lower() or "</html>" in raw.lower():
+            return http_status_message(exc.code, exc.reason)
         return raw[:500]
+
+
+def http_status_message(status: int, reason: str | None = None) -> str:
+    if status == 403:
+        return "Acces refuse par Vinted (403). Vinted bloque probablement la requete depuis cette IP ou cette session."
+    if status == 429:
+        return "Trop de requetes vers Vinted (429). Patiente quelques minutes puis reessaie."
+    if status == 401:
+        return "Session Vinted refusee (401). Reessaie plus tard ou renouvelle la session locale."
+    label = reason or "Erreur HTTP"
+    return f"{label} ({status})"
 
 
 def telegram_request(user_id: int, method: str, payload: dict) -> dict:

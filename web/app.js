@@ -41,7 +41,7 @@ async function api(path, options = {}) {
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
-    data = { error: text || "Réponse serveur illisible" };
+    data = { error: cleanServerError(text, response.status) };
   }
   if (!response.ok || data.ok === false) {
     if (response.status === 401 || data.authenticated === false) {
@@ -50,6 +50,18 @@ async function api(path, options = {}) {
     throw new Error(data.error || "Erreur inconnue");
   }
   return data;
+}
+
+function cleanServerError(text, status) {
+  const value = String(text || "").trim();
+  const lower = value.toLowerCase();
+  if (lower.includes("<html") || lower.startsWith("<!doctype html")) {
+    if (status === 403) {
+      return "Accès refusé (403). Le serveur a refusé la requête.";
+    }
+    return `Réponse serveur illisible${status ? ` (${status})` : ""}.`;
+  }
+  return value || "Réponse serveur illisible";
 }
 
 function formData(form) {
