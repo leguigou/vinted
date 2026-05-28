@@ -19,8 +19,10 @@ if "%VINTED_FETCH_API_TOKEN%"=="" (
 
 if "%VINTED_FETCH_API_HOST%"=="" set "VINTED_FETCH_API_HOST=127.0.0.1"
 if "%VINTED_FETCH_API_PORT%"=="" set "VINTED_FETCH_API_PORT=8797"
+if "%VINTED_FETCH_API_LOG_PATH%"=="" set "VINTED_FETCH_API_LOG_PATH=%~dp0fetch-api.log"
+set "PYTHONUNBUFFERED=1"
 
-python vinted_fetch_api.py
+python -u vinted_fetch_api.py
 if errorlevel 1 (
   echo.
   echo Le service API s'est arrete avec une erreur.

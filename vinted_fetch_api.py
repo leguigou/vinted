@@ -7,18 +7,28 @@ import time
 import urllib.parse
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import app
 
 
+ROOT = Path(__file__).resolve().parent
+SERVER_VERSION = "1.0.7"
 HOST = os.environ.get("VINTED_FETCH_API_HOST", "127.0.0.1")
 PORT = int(os.environ.get("VINTED_FETCH_API_PORT", "8797"))
 ACCESS_TOKEN = os.environ.get("VINTED_FETCH_API_TOKEN", "")
+LOG_PATH = Path(os.environ.get("VINTED_FETCH_API_LOG_PATH", ROOT / "fetch-api.log"))
 
 
 def log_event(message: str) -> None:
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] {message}", flush=True)
+    line = f"[{timestamp}] {message}"
+    print(line, flush=True)
+    try:
+        with LOG_PATH.open("a", encoding="utf-8") as log_file:
+            log_file.write(line + "\n")
+    except OSError:
+        pass
 
 
 def is_allowed_vinted_url(url: str) -> bool:
@@ -32,13 +42,20 @@ def is_allowed_vinted_url(url: str) -> bool:
 
 
 class FetchApiHandler(BaseHTTPRequestHandler):
-    server_version = "VintedFetchApi/1.0"
+    server_version = f"VintedFetchApi/{SERVER_VERSION}"
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         log_event(f"{self.client_address[0]} GET {parsed.path}")
         if parsed.path == "/health":
-            self.send_json({"ok": True})
+            self.send_json(
+                {
+                    "ok": True,
+                    "service": "vinted_fetch_api",
+                    "version": SERVER_VERSION,
+                    "pid": os.getpid(),
+                }
+            )
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -99,7 +116,7 @@ class FetchApiHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def log_message(self, format: str, *args) -> None:
-        return
+        log_event(f"{self.client_address[0]} {format % args}")
 
 
 def main() -> None:
@@ -108,6 +125,8 @@ def main() -> None:
 
     server = ThreadingHTTPServer((HOST, PORT), FetchApiHandler)
     log_event(f"Vinted Fetch API lance: http://{HOST}:{PORT}")
+    log_event(f"Script: {Path(__file__).resolve()}")
+    log_event(f"Log: {LOG_PATH.resolve()}")
     log_event("Garde cette fenetre ouverte pour accepter les appels distants.")
     try:
         server.serve_forever()

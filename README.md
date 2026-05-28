@@ -81,9 +81,10 @@ Le lanceur Windows charge automatiquement `fetch-api.env` si le fichier existe. 
 VINTED_FETCH_API_TOKEN=un-token-long-et-secret
 VINTED_FETCH_API_HOST=0.0.0.0
 VINTED_FETCH_API_PORT=8797
+VINTED_FETCH_API_LOG_PATH=fetch-api.log
 ```
 
-Le fichier `fetch-api.env` contient ton secret local et n'est pas versionne par Git.
+Le fichier `fetch-api.env` contient ton secret local et n'est pas versionne par Git. Les appels sont affiches dans la console et ajoutes dans `fetch-api.log`.
 
 Linux / Raspberry Pi :
 
