@@ -395,6 +395,13 @@ $("#themeToggle").addEventListener("click", () => {
 applyTheme(localStorage.getItem("vinted_theme"));
 syncMenuForViewport();
 
+const mobileMenuQuery = window.matchMedia("(max-width: 780px)");
+if (mobileMenuQuery.addEventListener) {
+  mobileMenuQuery.addEventListener("change", syncMenuForViewport);
+} else {
+  mobileMenuQuery.addListener(syncMenuForViewport);
+}
+
 $("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const error = $("#loginError");
