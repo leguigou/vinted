@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Vinted Alerts">
+  <rect width="512" height="512" rx="112" fill="#007782"/>
+  <path fill="#ffffff" d="M137 147h61l58 161 58-161h61l-91 226h-56L137 147z"/>
+  <circle cx="365" cy="157" r="42" fill="#f4f6f1"/>
+  <path fill="#007782" d="M365 130c15 0 27 12 27 27s-12 27-27 27-27-12-27-27 12-27 27-27z"/>
+</svg>

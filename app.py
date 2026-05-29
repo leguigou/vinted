@@ -762,6 +762,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_file(ROOT / "web" / "app.js", "application/javascript; charset=utf-8")
             elif parsed.path == "/styles.css":
                 self.send_file(ROOT / "web" / "styles.css", "text/css; charset=utf-8")
+            elif parsed.path == "/manifest.webmanifest":
+                self.send_file(ROOT / "web" / "manifest.webmanifest", "application/manifest+json; charset=utf-8")
+            elif parsed.path == "/service-worker.js":
+                self.send_file(ROOT / "web" / "service-worker.js", "application/javascript; charset=utf-8")
+            elif parsed.path in {"/icon.svg", "/favicon.svg"}:
+                self.send_file(ROOT / "web" / "icon.svg", "image/svg+xml; charset=utf-8")
+            elif parsed.path == "/icon-192.png":
+                self.send_file(ROOT / "web" / "icon-192.png", "image/png")
+            elif parsed.path == "/icon-512.png":
+                self.send_file(ROOT / "web" / "icon-512.png", "image/png")
             elif parsed.path == "/api/state":
                 user = self.require_user()
                 self.send_json(api_state(user))

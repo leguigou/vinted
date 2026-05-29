@@ -24,6 +24,16 @@ Tu peux aussi lancer l'application avec `start.bat` ou `run.bat` sous Windows.
 
 Par defaut, le compte admin est `admin` / `admin123`. Si `VINTED_ALERTS_ADMIN_PASSWORD` est definie au demarrage, elle cree ou remet a jour le mot de passe du compte admin cible.
 
+## Installation comme application PWA
+
+Vinted Alerts peut etre installe depuis le navigateur comme une application.
+
+- En local, ouvre `http://127.0.0.1:8787`.
+- Sur un serveur distant, utilise une URL HTTPS via ton domaine Dokploy ou ton reverse proxy.
+- Dans Chrome ou Edge, clique sur l'icone d'installation dans la barre d'adresse, ou va dans le menu du navigateur puis `Installer Vinted Alerts`.
+
+La PWA garde l'interface en cache pour demarrer plus vite, mais les appels `/api` restent toujours en direct pour eviter les donnees perimees.
+
 ## Lancement avec Docker
 
 ```powershell
