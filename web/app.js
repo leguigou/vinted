@@ -1,16 +1,18 @@
 const $ = (selector) => document.querySelector(selector);
 const ITEMS_PAGE_SIZE = 12;
+const DASHBOARD_ITEMS_LIMIT = 10;
+const MOBILE_MENU_QUERY = window.matchMedia("(max-width: 780px)");
 const VIEW_TITLES = {
   account: "Mon compte",
   users: "Utilisateurs",
   telegram: "Telegram",
   "new-search": "Nouvelle recherche",
   searches: "Recherches actives",
-  items: "Derniers articles",
+  items: "Historique alertes",
 };
 let itemsPage = 1;
 let isAuthenticated = false;
-let activeView = "account";
+let activeView = "searches";
 
 function applyTheme(theme) {
   const activeTheme = theme === "dark" ? "dark" : "light";
@@ -80,22 +82,79 @@ function escapeAttr(value) {
   return escapeHtml(value).replaceAll("'", "&#39;");
 }
 
+function parseLocalDate(value) {
+  if (!value) return null;
+  const normalized = String(value).trim().replace(" ", "T");
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function relativeTime(value) {
+  const date = parseLocalDate(value);
+  if (!date) return "";
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  const units = [
+    ["d", 86400],
+    ["h", 3600],
+    ["m", 60],
+  ];
+  for (const [label, size] of units) {
+    if (seconds >= size) return `${Math.floor(seconds / size)}${label} ago`;
+  }
+  return "now";
+}
+
+function refreshRelativeTimes() {
+  document.querySelectorAll("[data-relative-time]").forEach((element) => {
+    const label = relativeTime(element.dataset.relativeTime);
+    if (label) element.textContent = label;
+  });
+}
+
 function showTelegramHelp(message, isError = false) {
   const help = $("#telegramHelp");
   help.textContent = message;
   help.classList.toggle("error", isError);
 }
 
+function menuControls() {
+  return [$("#menuToggle"), $("#mobileMenuToggle")].filter(Boolean);
+}
+
+function setMenuExpanded(expanded) {
+  const isExpanded = Boolean(expanded);
+  document.body.classList.toggle("menuCollapsed", !isExpanded);
+  menuControls().forEach((button) => {
+    button.setAttribute("aria-expanded", String(isExpanded));
+    button.setAttribute("aria-label", isExpanded ? "Fermer le menu" : "Ouvrir le menu");
+  });
+
+  const backdrop = $("#menuBackdrop");
+  if (backdrop) {
+    backdrop.hidden = !(MOBILE_MENU_QUERY.matches && isExpanded && isAuthenticated);
+  }
+  document.body.classList.toggle("menuOpen", MOBILE_MENU_QUERY.matches && isExpanded);
+}
+
+function syncMenuForViewport() {
+  setMenuExpanded(!MOBILE_MENU_QUERY.matches);
+}
+
 function showLogin() {
   isAuthenticated = false;
+  setMenuExpanded(false);
   $("#loginShell").hidden = false;
   $("#appShell").hidden = true;
 }
 
 function showApp() {
+  const wasHidden = $("#appShell").hidden;
   isAuthenticated = true;
   $("#loginShell").hidden = true;
   $("#appShell").hidden = false;
+  if (wasHidden) {
+    syncMenuForViewport();
+  }
 }
 
 function switchView(view) {
@@ -108,22 +167,28 @@ function switchView(view) {
   });
   $("#viewTitle").textContent = VIEW_TITLES[view] || "Vinted Alerts";
 
-  if (window.matchMedia("(max-width: 780px)").matches) {
-    document.body.classList.add("menuCollapsed");
-    $("#menuToggle").setAttribute("aria-expanded", "false");
+  if (MOBILE_MENU_QUERY.matches) {
+    setMenuExpanded(false);
   }
-}
-
-function syncMenuForViewport() {
-  const shouldCollapse = window.matchMedia("(max-width: 780px)").matches;
-  document.body.classList.toggle("menuCollapsed", shouldCollapse);
-  $("#menuToggle").setAttribute("aria-expanded", String(!shouldCollapse));
 }
 
 async function loadState() {
   const state = await api("/api/state");
   showApp();
-  renderState(state);
+  let dashboardItems = { items: [] };
+  try {
+    dashboardItems = await api(`/api/dashboard-items?limit=${DASHBOARD_ITEMS_LIMIT}`);
+  } catch (error) {
+    try {
+      const fallback = await api("/api/items?page=1&page_size=50");
+      dashboardItems = {
+        items: dashboardItemsFromRecent(state.searches, fallback.items || []),
+      };
+    } catch {
+      $("#status").textContent = error.message;
+    }
+  }
+  renderState(state, dashboardItems);
   try {
     const items = await api(`/api/items?page=${itemsPage}&page_size=${ITEMS_PAGE_SIZE}`);
     renderItems(items);
@@ -133,9 +198,103 @@ async function loadState() {
   }
 }
 
-function renderState(state) {
+function dashboardItemsFromRecent(searches, items) {
+  const searchByName = new Map(searches.map((search) => [String(search.name).toLowerCase(), search]));
+  const counts = new Map();
+  const normalized = [];
+  items.forEach((item) => {
+    const search = searchByName.get(String(item.search_name || "").toLowerCase());
+    if (!search) return;
+    const key = String(search.id);
+    const count = counts.get(key) || 0;
+    if (count >= DASHBOARD_ITEMS_LIMIT) return;
+    counts.set(key, count + 1);
+    normalized.push({ ...item, search_id: search.id });
+  });
+  return normalized;
+}
+
+function renderDashboardSearches(container, searches, items) {
+  const itemsBySearch = new Map();
+  items.forEach((item) => {
+    const key = String(item.search_id);
+    if (!itemsBySearch.has(key)) itemsBySearch.set(key, []);
+    itemsBySearch.get(key).push(item);
+  });
+
+  container.innerHTML = searches
+    .map((search) => {
+      const latestItems = itemsBySearch.get(String(search.id)) || [];
+      const meta = [
+        `toutes les ${search.interval_seconds}s`,
+        search.last_checked_at ? `dernier check ${escapeHtml(search.last_checked_at)}` : "",
+        search.last_error ? `erreur ${escapeHtml(search.last_error)}` : "",
+      ].filter(Boolean).join(" - ");
+      const slider = latestItems.length
+        ? latestItems.map((item) => `
+            <a class="sliderItem" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">
+              <span class="sliderPhoto">
+                ${item.photo_url ? `<img src="${escapeHtml(item.photo_url)}" alt="" loading="lazy" />` : '<span class="noPhoto sliderNoPhoto"></span>'}
+                <span class="sliderPrice">${escapeHtml(item.price || "Prix non indique")}</span>
+              </span>
+              <strong>${escapeHtml(item.title)}</strong>
+              <small class="sliderTime">
+                <span class="iconGlyph iconHistory" aria-hidden="true"></span>
+                <span data-relative-time="${escapeAttr(item.created_at)}">${escapeHtml(relativeTime(item.created_at))}</span>
+              </small>
+            </a>
+          `).join("")
+        : '<p class="empty sliderEmpty">Aucun article detecte pour cette recherche.</p>';
+      return `
+        <article class="dashboardSearch ${search.enabled ? "isActive" : "isPaused"}">
+          <div class="dashboardSearchHeader">
+            <div class="dashboardSearchTitle">
+              <strong>${escapeHtml(search.name)}</strong>
+              <small>${meta}</small>
+            </div>
+            <button class="searchSwitch" type="button" role="switch" aria-checked="${search.enabled ? "true" : "false"}" data-toggle="${search.id}">
+              <span class="switchTrack"><span class="switchThumb"></span></span>
+              <span class="switchLabel">${search.enabled ? "Active" : "Pause"}</span>
+            </button>
+          </div>
+          <div class="dashboardSearchUrl">${escapeHtml(search.url)}</div>
+          <div class="searchSlider" aria-label="Derniers articles ${escapeAttr(search.name)}">
+            ${slider}
+          </div>
+          <div class="rowActions dashboardActions">
+            <button data-edit="${search.id}">Modifier</button>
+            <button data-delete="${search.id}" class="danger">Supprimer</button>
+          </div>
+          <form class="editForm" data-edit-form="${search.id}" hidden>
+            <label>
+              Nom
+              <input name="name" value="${escapeAttr(search.name)}" required />
+            </label>
+            <label>
+              URL Vinted
+              <input name="url" value="${escapeAttr(search.url)}" required />
+            </label>
+            <label>
+              Intervalle en secondes
+              <input name="interval_seconds" type="number" min="60" value="${search.interval_seconds}" />
+            </label>
+            <div class="actions">
+              <button type="submit">Sauvegarder</button>
+              <button type="button" data-cancel-edit="${search.id}">Annuler</button>
+            </div>
+            <small data-edit-error="${search.id}"></small>
+          </form>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderState(state, dashboardItems = { items: [] }) {
   $("#currentUser").textContent = state.user.username;
   $("#userAvatar").textContent = state.user.username.slice(0, 1) || "?";
+  $("#sideCurrentUser").textContent = state.user.username;
+  $("#sideUserAvatar").textContent = state.user.username.slice(0, 1) || "?";
   $("#accountUsername").textContent = state.user.username;
   $("#accountAvatar").textContent = state.user.username.slice(0, 1) || "?";
   $("#accountRole").textContent = state.user.is_admin ? "Administrateur" : "Utilisateur";
@@ -203,6 +362,8 @@ function renderState(state) {
     `)
     .join("");
 
+  renderDashboardSearches(searches, state.searches, dashboardItems.items || []);
+
   searches.querySelectorAll("[data-edit]").forEach((button) => {
     button.addEventListener("click", () => {
       const form = searches.querySelector(`[data-edit-form="${button.dataset.edit}"]`);
@@ -252,10 +413,11 @@ function renderState(state) {
 
 function renderUsers(state) {
   const panel = $("#adminPanel");
-  const navButton = $('[data-view="users"]');
   const users = $("#users");
   panel.hidden = !state.user.is_admin;
-  navButton.hidden = !state.user.is_admin;
+  document.querySelectorAll("[data-admin-only]").forEach((element) => {
+    element.hidden = !state.user.is_admin;
+  });
   if (!state.user.is_admin) {
     if (activeView === "users") switchView("account");
     return;
@@ -365,6 +527,8 @@ function renderItems(data) {
       </a>
     `)
     .join("");
+
+  refreshRelativeTimes();
 }
 
 $("#itemsPrev").addEventListener("click", async () => {
@@ -382,9 +546,18 @@ document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", () => switchView(button.dataset.view));
 });
 
-$("#menuToggle").addEventListener("click", () => {
-  const collapsed = document.body.classList.toggle("menuCollapsed");
-  $("#menuToggle").setAttribute("aria-expanded", String(!collapsed));
+menuControls().forEach((button) => {
+  button.addEventListener("click", () => {
+    setMenuExpanded(document.body.classList.contains("menuCollapsed"));
+  });
+});
+
+$("#menuBackdrop").addEventListener("click", () => setMenuExpanded(false));
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && MOBILE_MENU_QUERY.matches) {
+    setMenuExpanded(false);
+  }
 });
 
 $("#themeToggle").addEventListener("click", () => {
@@ -395,11 +568,10 @@ $("#themeToggle").addEventListener("click", () => {
 applyTheme(localStorage.getItem("vinted_theme"));
 syncMenuForViewport();
 
-const mobileMenuQuery = window.matchMedia("(max-width: 780px)");
-if (mobileMenuQuery.addEventListener) {
-  mobileMenuQuery.addEventListener("change", syncMenuForViewport);
+if (MOBILE_MENU_QUERY.addEventListener) {
+  MOBILE_MENU_QUERY.addEventListener("change", syncMenuForViewport);
 } else {
-  mobileMenuQuery.addListener(syncMenuForViewport);
+  MOBILE_MENU_QUERY.addListener(syncMenuForViewport);
 }
 
 $("#loginForm").addEventListener("submit", async (event) => {
@@ -418,11 +590,32 @@ $("#loginForm").addEventListener("submit", async (event) => {
   }
 });
 
-$("#logout").addEventListener("click", async () => {
+async function logout() {
   await api("/api/logout", { method: "POST", body: "{}" });
   localStorage.removeItem("vinted_session_token");
   showLogin();
-});
+}
+
+$("#logout").addEventListener("click", logout);
+$("#sideLogout").addEventListener("click", logout);
+
+function setUserFormOpen(open) {
+  const form = $("#userForm");
+  const toggle = $("#userFormToggle");
+  const error = $("#userError");
+  form.hidden = !open;
+  toggle.hidden = open;
+  if (open) {
+    error.textContent = "";
+    form.querySelector('input[name="username"]').focus();
+    return;
+  }
+  form.reset();
+  error.textContent = "";
+}
+
+$("#userFormToggle").addEventListener("click", () => setUserFormOpen(true));
+$("#userFormCancel").addEventListener("click", () => setUserFormOpen(false));
 
 $("#userForm").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -430,7 +623,7 @@ $("#userForm").addEventListener("submit", async (event) => {
   error.textContent = "";
   try {
     await api("/api/users", { method: "POST", body: JSON.stringify(formData(event.target)) });
-    event.target.reset();
+    setUserFormOpen(false);
     await loadState();
   } catch (exception) {
     error.textContent = exception.message;
@@ -498,20 +691,31 @@ $("#searchForm").addEventListener("submit", async (event) => {
   await loadState();
 });
 
-$("#checkNow").addEventListener("click", async () => {
-  const button = $("#checkNow");
-  button.disabled = true;
-  button.textContent = "Vérification...";
+async function checkNow() {
+  const buttons = document.querySelectorAll(".checkNowButton");
+  buttons.forEach((button) => {
+    button.disabled = true;
+    button.dataset.defaultText = button.dataset.defaultText || button.textContent;
+    button.textContent = "Verification...";
+  });
   try {
     const result = await api("/api/check-now", { method: "POST", body: "{}" });
-    button.textContent = `${result.new_items} nouveau(x)`;
+    buttons.forEach((button) => {
+      button.textContent = `${result.new_items} nouveau(x)`;
+    });
     await loadState();
   } finally {
     setTimeout(() => {
-      button.disabled = false;
-      button.textContent = "Vérifier maintenant";
+      buttons.forEach((button) => {
+        button.disabled = false;
+        button.textContent = button.dataset.defaultText || "Verifier maintenant";
+      });
     }, 1500);
   }
+}
+
+document.querySelectorAll(".checkNowButton").forEach((button) => {
+  button.addEventListener("click", checkNow);
 });
 
 $("#testTelegram").addEventListener("click", async () => {
@@ -559,6 +763,11 @@ setInterval(() => {
     $("#status").textContent = error.message;
   });
 }, 15000);
+
+setInterval(() => {
+  if (!isAuthenticated) return;
+  refreshRelativeTimes();
+}, 30000);
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

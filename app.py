@@ -66,9 +66,16 @@ last_error: str | None = None
 initialized_search_ids: set[int] = set()
 vinted_lock = threading.Lock()
 vinted_cookie_jar = http.cookiejar.CookieJar()
-vinted_opener = urllib.request.build_opener(
-    urllib.request.HTTPCookieProcessor(vinted_cookie_jar)
-)
+
+
+def build_vinted_opener() -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        urllib.request.HTTPCookieProcessor(vinted_cookie_jar),
+    )
+
+
+vinted_opener = build_vinted_opener()
 
 
 def now_iso() -> str:
@@ -352,9 +359,7 @@ def reset_vinted_session() -> None:
     global vinted_cookie_jar, vinted_opener
 
     vinted_cookie_jar = http.cookiejar.CookieJar()
-    vinted_opener = urllib.request.build_opener(
-        urllib.request.HTTPCookieProcessor(vinted_cookie_jar)
-    )
+    vinted_opener = build_vinted_opener()
 
 
 def warm_vinted_session() -> None:
@@ -362,8 +367,11 @@ def warm_vinted_session() -> None:
         "https://www.vinted.fr/",
         headers={**VINTED_HEADERS, "Accept": "text/html,application/xhtml+xml"},
     )
-    with vinted_opener.open(request, timeout=20) as response:
-        response.read(1024)
+    try:
+        with vinted_opener.open(request, timeout=20) as response:
+            response.read(1024)
+    except OSError as exc:
+        raise RuntimeError(network_error_message(exc)) from exc
 
 
 def http_json(url: str, headers: dict[str, str], opener=None) -> dict:
@@ -376,6 +384,8 @@ def http_json(url: str, headers: dict[str, str], opener=None) -> dict:
         raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Connexion impossible: {exc.reason}") from exc
+    except OSError as exc:
+        raise RuntimeError(network_error_message(exc)) from exc
 
     with response_context as response:
         charset = response.headers.get_content_charset() or "utf-8"
@@ -521,6 +531,17 @@ def http_status_message(status: int, reason: str | None = None) -> str:
         return "Session Vinted refusee (401). Reessaie plus tard ou renouvelle la session locale."
     label = reason or "Erreur HTTP"
     return f"{label} ({status})"
+
+
+def network_error_message(exc: OSError) -> str:
+    detail = str(exc)
+    if "aswMonFltProxy" in detail:
+        return (
+            "Acces reseau bloque par le filtre Web Avast/AVG. "
+            "Ajoute python.exe aux applications autorisees, desactive l'analyse HTTPS/Web Shield "
+            "pour ce test, ou active l'API de fetch distante."
+        )
+    return f"Erreur reseau locale: {detail}"
 
 
 def telegram_request(user_id: int, method: str, payload: dict) -> dict:
@@ -784,6 +805,11 @@ class Handler(BaseHTTPRequestHandler):
                 page = query_int(query, "page", 1)
                 page_size = query_int(query, "page_size", 12)
                 self.send_json(recent_items(user["id"], page=page, page_size=page_size))
+            elif parsed.path == "/api/dashboard-items":
+                user = self.require_user()
+                query = urllib.parse.parse_qs(parsed.query)
+                limit = query_int(query, "limit", 10)
+                self.send_json(dashboard_items(user["id"], limit=limit))
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
         except PermissionError as exc:
@@ -1236,6 +1262,31 @@ def recent_items(user_id: int, page: int = 1, page_size: int = 12) -> dict:
         "total": total,
         "total_pages": total_pages,
     }
+
+
+def dashboard_items(user_id: int, limit: int = 10) -> dict:
+    limit = max(1, min(limit, 20))
+    with db() as conn:
+        rows = conn.execute(
+            """
+            select search_id, search_name, title, price, url, photo_url, created_at, notified_at
+            from (
+                select i.search_id, s.name as search_name, i.title, i.price, i.url,
+                       i.photo_url, i.created_at, i.notified_at,
+                       row_number() over (
+                           partition by i.search_id
+                           order by i.created_at desc, i.id desc
+                       ) as item_rank
+                from seen_items i
+                join searches s on s.id = i.search_id
+                where s.user_id = ?
+            )
+            where item_rank <= ?
+            order by search_name collate nocase asc, created_at desc
+            """,
+            (user_id, limit),
+        ).fetchall()
+    return {"items": [dict(row) for row in rows], "limit": limit}
 
 
 def main() -> None:

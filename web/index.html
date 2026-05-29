@@ -33,34 +33,76 @@
             <div id="loginError" class="help error"></div>
           </form>
         </section>
-        <small class="appVersion">Version 1.0.10</small>
+        <small class="appVersion">Version 1.0.24</small>
       </div>
     </main>
 
     <main id="appShell" class="appLayout" hidden>
-      <aside id="sideMenu" class="sideMenu">
+      <header class="mobileHeader" aria-label="Barre mobile">
+        <button id="mobileMenuToggle" class="iconButton mobileMenuButton" type="button" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="sideMenu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <strong>Vinted Alerts</strong>
+        <button id="mobileCheckNow" class="primary checkNowButton mobileCheckNow" type="button">Verifier maintenant</button>
+      </header>
+      <div id="menuBackdrop" class="menuBackdrop" hidden></div>
+
+      <aside id="sideMenu" class="sideMenu" aria-label="Menu principal">
         <div class="sideBrand">
+          <span class="brandIcon iconGlyph iconBell" aria-hidden="true"></span>
           <strong>Vinted Alerts</strong>
-          <button id="menuToggle" class="iconButton" type="button" aria-label="Menu" aria-expanded="true">
+          <button id="menuToggle" class="iconButton" type="button" aria-label="Menu" aria-expanded="true" aria-controls="sideMenu">
             <span></span>
             <span></span>
             <span></span>
           </button>
         </div>
         <nav class="sideNav" aria-label="Navigation principale">
-          <button class="navItem active" type="button" data-view="account">Mon compte</button>
-          <button class="navItem" type="button" data-view="users">Utilisateurs</button>
-          <button class="navItem" type="button" data-view="telegram">Telegram</button>
-          <button class="navItem" type="button" data-view="new-search">Nouvelle recherche</button>
-          <button class="navItem" type="button" data-view="searches">Recherches actives</button>
-          <button class="navItem" type="button" data-view="items">Derniers articles</button>
+          <button class="navItem active" type="button" data-view="searches">
+            <span class="navIcon iconGlyph iconDashboard" aria-hidden="true"></span>
+            <span class="navText">Dashboard</span>
+          </button>
+          <button class="navItem" type="button" data-view="new-search">
+            <span class="navIcon iconGlyph iconPlus" aria-hidden="true"></span>
+            <span class="navText">Nouvelle recherche</span>
+          </button>
+          <button class="navItem" type="button" data-view="items">
+            <span class="navIcon iconGlyph iconHistory" aria-hidden="true"></span>
+            <span class="navText">Historique alertes</span>
+          </button>
+          <button class="navItem" type="button" data-view="account">
+            <span class="navIcon iconGlyph iconUser" aria-hidden="true"></span>
+            <span class="navText">Mon compte</span>
+          </button>
+          <button class="navItem" type="button" data-view="users" data-admin-only>
+            <span class="navIcon iconGlyph iconUsers" aria-hidden="true"></span>
+            <span class="navText">Gerer les utilisateurs</span>
+          </button>
+          <button class="navItem" type="button" data-view="telegram">
+            <span class="navIcon iconGlyph iconSend" aria-hidden="true"></span>
+            <span class="navText">Configuration Telegram</span>
+          </button>
         </nav>
+        <div class="sideFooter">
+          <button class="sideUserMini" type="button" data-view="account" aria-label="Ouvrir mon compte">
+            <span id="sideUserAvatar" class="userAvatar">?</span>
+            <span class="sideUserMeta">
+              <strong id="sideCurrentUser">Active User</strong>
+              <small>Pro Plan</small>
+            </span>
+          </button>
+          <button id="sideLogout" class="powerButton" type="button" aria-label="Deconnexion">
+            <span class="iconGlyph iconPower" aria-hidden="true"></span>
+          </button>
+        </div>
       </aside>
 
       <section class="workspace">
         <header class="topbar">
           <div>
-            <h1 id="viewTitle">Mon compte</h1>
+            <h1 id="viewTitle">Recherches actives</h1>
             <p>Surveillance locale de recherches Vinted avec notifications Telegram.</p>
           </div>
           <div class="topActions">
@@ -73,11 +115,11 @@
               <span id="themeToggleText">Theme sombre</span>
             </button>
             <button id="logout" type="button">Deconnexion</button>
-            <button id="checkNow" class="primary">Verifier maintenant</button>
+            <button id="checkNow" class="primary checkNowButton" type="button">Verifier maintenant</button>
           </div>
         </header>
 
-        <section id="accountPanel" class="panel viewPanel active" data-panel="account">
+        <section id="accountPanel" class="panel viewPanel" data-panel="account">
           <div class="sectionTitle">
             <h2>Mon compte</h2>
             <span id="accountRole" class="muted"></span>
@@ -102,14 +144,51 @@
             <button id="accountPasswordCancel" type="button">Annuler</button>
             <small id="accountPasswordMessage"></small>
           </form>
+          <div class="accountShortcuts">
+            <button class="accountShortcut" type="button" data-view="account">
+              <span class="shortcutIconBubble"><span class="shortcutIcon iconGlyph iconUser" aria-hidden="true"></span></span>
+              <span>
+                <strong>Mon compte</strong>
+                <small>Informations personnelles et securite</small>
+              </span>
+              <span class="shortcutChevron" aria-hidden="true"></span>
+            </button>
+            <button class="accountShortcut" type="button" data-view="users" data-admin-only>
+              <span class="shortcutIconBubble"><span class="shortcutIcon iconGlyph iconUsers" aria-hidden="true"></span></span>
+              <span>
+                <strong>Gerer les utilisateurs</strong>
+                <small>Acces et permissions d'equipe</small>
+              </span>
+              <span class="shortcutChevron" aria-hidden="true"></span>
+            </button>
+            <button class="accountShortcut" type="button" data-view="telegram">
+              <span class="shortcutIconBubble"><span class="shortcutIcon iconGlyph iconSend" aria-hidden="true"></span></span>
+              <span>
+                <strong>Configuration Telegram</strong>
+                <small>Liaison de bot et notifications</small>
+              </span>
+              <span class="shortcutChevron" aria-hidden="true"></span>
+            </button>
+            <button class="accountShortcut" type="button" data-view="new-search">
+              <span class="shortcutIconBubble"><span class="shortcutIcon iconGlyph iconSettings" aria-hidden="true"></span></span>
+              <span>
+                <strong>Parametres</strong>
+                <small>Recherches, frequence et suivi</small>
+              </span>
+              <span class="shortcutChevron" aria-hidden="true"></span>
+            </button>
+          </div>
         </section>
 
         <section id="adminPanel" class="panel viewPanel" data-panel="users" hidden>
           <div class="sectionTitle">
-            <h2>Utilisateurs</h2>
-            <span id="usersSummary" class="muted"></span>
+            <div>
+              <h2>Utilisateurs</h2>
+              <span id="usersSummary" class="muted"></span>
+            </div>
+            <button id="userFormToggle" class="primary sectionAction" type="button">Ajouter un utilisateur</button>
           </div>
-          <form id="userForm" class="userForm">
+          <form id="userForm" class="userForm" hidden>
             <label>
               Utilisateur
               <input name="username" required />
@@ -123,6 +202,7 @@
               Admin
             </label>
             <button type="submit">Creer</button>
+            <button id="userFormCancel" type="button">Annuler</button>
             <small id="userError"></small>
           </form>
           <div id="users" class="list compactList"></div>
@@ -167,7 +247,7 @@
           </form>
         </section>
 
-        <section class="panel viewPanel" data-panel="searches">
+        <section class="panel viewPanel active" data-panel="searches">
           <div class="sectionTitle">
             <h2>Recherches actives</h2>
             <span id="status" class="muted"></span>
@@ -188,6 +268,25 @@
           </div>
         </section>
       </section>
+
+      <nav class="bottomNav" aria-label="Navigation mobile">
+        <button class="bottomNavItem active" type="button" data-view="searches">
+          <span class="bottomIconPill"><span class="iconGlyph iconHome" aria-hidden="true"></span></span>
+          <span>Home</span>
+        </button>
+        <button class="bottomNavItem" type="button" data-view="new-search">
+          <span class="bottomIconPill"><span class="iconGlyph iconSearch" aria-hidden="true"></span></span>
+          <span>Searches</span>
+        </button>
+        <button class="bottomNavItem" type="button" data-view="account">
+          <span class="bottomIconPill"><span class="iconGlyph iconUser" aria-hidden="true"></span></span>
+          <span>Account</span>
+        </button>
+        <button class="bottomNavItem" type="button" data-view="items">
+          <span class="bottomIconPill"><span class="iconGlyph iconBell" aria-hidden="true"></span></span>
+          <span>Alertes</span>
+        </button>
+      </nav>
     </main>
 
     <script src="/app.js"></script>
