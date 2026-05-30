@@ -15,6 +15,9 @@
   --photo-bg: #e5ebe5;
   --accent: #64e6d8;
   --accent-soft: #dff8f4;
+  --active-nav-ink: #000000;
+  --logout-bg: #ffe8e8;
+  --logout-ink: #b9232d;
   --shadow: 0 14px 34px rgb(15 43 38 / 10%);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -36,6 +39,9 @@ body[data-theme="dark"] {
   --photo-bg: #22312d;
   --accent: #63ded4;
   --accent-soft: #183331;
+  --active-nav-ink: #000000;
+  --logout-bg: #3b1f23;
+  --logout-ink: #ff9ca9;
   --shadow: 0 14px 34px rgb(0 0 0 / 28%);
 }
 
@@ -238,7 +244,16 @@ body.menuCollapsed .sideFooter {
 .navItem.active {
   border-color: var(--nav-border);
   background: var(--nav-hover);
-  color: var(--primary-dark);
+  color: var(--active-nav-ink);
+}
+
+.navItem:hover .navText,
+.navItem:hover .navIcon,
+.navItem:hover .themeIcon,
+.navItem.active .navText,
+.navItem.active .navIcon,
+.navItem.active .themeIcon {
+  color: var(--active-nav-ink);
 }
 
 .navIcon {
@@ -301,14 +316,19 @@ body.menuCollapsed .sideFooter {
 
 .powerButton {
   display: inline-grid;
+  flex: 0 0 38px;
   place-items: center;
   width: 38px;
   height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  aspect-ratio: 1;
   border: 0;
   border-radius: 999px;
-  background: #ffe8e8;
-  color: #b9232d;
+  background: var(--logout-bg);
+  color: var(--logout-ink);
   padding: 0;
+  line-height: 1;
 }
 
 .powerButton .iconGlyph {
@@ -519,6 +539,10 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.sideThemeToggle {
+  display: none;
 }
 
 .themeIcon {
@@ -1095,7 +1119,7 @@ body[data-theme="dark"] .themeIcon::after {
 @media (max-width: 780px) {
   body {
     overflow-x: hidden;
-    background: #f8fbf8;
+    background: var(--bg);
   }
 
   body.menuCollapsed .appLayout,
@@ -1225,6 +1249,10 @@ body[data-theme="dark"] .themeIcon::after {
     padding-top: 2px;
   }
 
+  .sideThemeToggle {
+    display: flex;
+  }
+
   .navItem {
     justify-content: flex-start;
     min-height: 44px;
@@ -1240,7 +1268,7 @@ body[data-theme="dark"] .themeIcon::after {
   .navItem.active {
     border-color: transparent;
     background: var(--accent);
-    color: var(--primary-dark);
+    color: var(--active-nav-ink);
   }
 
   .sideFooter {

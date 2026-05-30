@@ -12,7 +12,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=1.0.30" />
   </head>
   <body>
     <main id="loginShell" class="shell authShell">
@@ -33,7 +33,7 @@
             <div id="loginError" class="help error"></div>
           </form>
         </section>
-        <small class="appVersion">Version 1.0.24</small>
+        <small class="appVersion">Version 1.0.30</small>
       </div>
     </main>
 
@@ -80,9 +80,9 @@
             <span class="navIcon iconGlyph iconUsers" aria-hidden="true"></span>
             <span class="navText">Gerer les utilisateurs</span>
           </button>
-          <button class="navItem" type="button" data-view="telegram">
-            <span class="navIcon iconGlyph iconSend" aria-hidden="true"></span>
-            <span class="navText">Configuration Telegram</span>
+          <button id="sideThemeToggle" class="navItem sideThemeToggle" type="button" aria-pressed="false">
+            <span class="navIcon themeIcon" aria-hidden="true"></span>
+            <span id="sideThemeToggleText" class="navText">Theme sombre</span>
           </button>
         </nav>
         <div class="sideFooter">
@@ -145,7 +145,7 @@
             <small id="accountPasswordMessage"></small>
           </form>
           <div class="accountShortcuts">
-            <button class="accountShortcut" type="button" data-view="account">
+            <button id="accountSecurityShortcut" class="accountShortcut" type="button">
               <span class="shortcutIconBubble"><span class="shortcutIcon iconGlyph iconUser" aria-hidden="true"></span></span>
               <span>
                 <strong>Mon compte</strong>
@@ -289,6 +289,6 @@
       </nav>
     </main>
 
-    <script src="/app.js"></script>
+    <script src="/app.js?v=1.0.30"></script>
   </body>
 </html>

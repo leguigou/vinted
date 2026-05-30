@@ -1,4 +1,4 @@
-const CACHE_NAME = "vinted-alerts-1.0.24";
+const CACHE_NAME = "vinted-alerts-1.0.30";
 const APP_SHELL = [
   "/",
   "/app.js",

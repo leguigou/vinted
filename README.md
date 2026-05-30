@@ -18,9 +18,9 @@ $env:VINTED_ALERTS_ADMIN_PASSWORD = "change-moi"
 python app.py
 ```
 
-5. Ouvre http://127.0.0.1:8787 dans ton navigateur.
+5. Ouvre http://127.0.0.1:8790 dans ton navigateur.
 
-Tu peux aussi lancer l'application avec `start.bat` ou `run.bat` sous Windows.
+Tu peux aussi lancer l'application avec `start.bat` sous Windows.
 
 Par defaut, le compte admin est `admin` / `admin123`. Si `VINTED_ALERTS_ADMIN_PASSWORD` est definie au demarrage, elle cree ou remet a jour le mot de passe du compte admin cible.
 
@@ -28,7 +28,7 @@ Par defaut, le compte admin est `admin` / `admin123`. Si `VINTED_ALERTS_ADMIN_PA
 
 Vinted Alerts peut etre installe depuis le navigateur comme une application.
 
-- En local, ouvre `http://127.0.0.1:8787`.
+- En local, ouvre `http://127.0.0.1:8790`.
 - Sur un serveur distant, utilise une URL HTTPS via ton domaine Dokploy ou ton reverse proxy.
 - Dans Chrome ou Edge, clique sur l'icone d'installation dans la barre d'adresse, ou va dans le menu du navigateur puis `Installer Vinted Alerts`.
 
@@ -40,12 +40,12 @@ La PWA garde l'interface en cache pour demarrer plus vite, mais les appels `/api
 docker compose up --build
 ```
 
-L'interface sera disponible sur http://127.0.0.1:8787.
+L'interface sera disponible sur http://127.0.0.1:8790.
 
 Variables d'environnement utiles :
 
 - `VINTED_ALERTS_HOST` : adresse d'ecoute, par defaut `127.0.0.1`.
-- `VINTED_ALERTS_PORT` : port HTTP, par defaut `8787`.
+- `VINTED_ALERTS_PORT` : port HTTP, par defaut `8790`.
 - `VINTED_ALERTS_DB_PATH` : chemin de la base SQLite.
 - `VINTED_ALERTS_ADMIN_USERNAME` : utilisateur admin cible, par defaut `admin`.
 - `VINTED_ALERTS_ADMIN_PASSWORD` : mot de passe admin. Si la variable est definie, elle est appliquee au demarrage.

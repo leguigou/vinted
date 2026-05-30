@@ -19,11 +19,15 @@ function applyTheme(theme) {
   document.body.dataset.theme = activeTheme;
   localStorage.setItem("vinted_theme", activeTheme);
 
-  const toggle = $("#themeToggle");
-  if (!toggle) return;
   const isDark = activeTheme === "dark";
-  toggle.setAttribute("aria-pressed", String(isDark));
-  $("#themeToggleText").textContent = isDark ? "Theme clair" : "Theme sombre";
+  [
+    { button: $("#themeToggle"), text: $("#themeToggleText") },
+    { button: $("#sideThemeToggle"), text: $("#sideThemeToggleText") },
+  ].forEach(({ button, text }) => {
+    if (!button || !text) return;
+    button.setAttribute("aria-pressed", String(isDark));
+    text.textContent = isDark ? "Theme clair" : "Theme sombre";
+  });
 }
 
 async function api(path, options = {}) {
@@ -170,6 +174,17 @@ function switchView(view) {
   if (MOBILE_MENU_QUERY.matches) {
     setMenuExpanded(false);
   }
+}
+
+function showAccountPasswordForm() {
+  switchView("account");
+  const form = $("#accountPasswordForm");
+  const message = $("#accountPasswordMessage");
+  form.hidden = false;
+  $("#accountPasswordToggle").hidden = true;
+  message.textContent = "";
+  message.classList.remove("error");
+  form.querySelector('input[name="password"]').focus();
 }
 
 async function loadState() {
@@ -560,10 +575,14 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-$("#themeToggle").addEventListener("click", () => {
+function toggleTheme() {
   const nextTheme = document.body.dataset.theme === "dark" ? "light" : "dark";
   applyTheme(nextTheme);
-});
+}
+
+$("#themeToggle").addEventListener("click", toggleTheme);
+
+$("#sideThemeToggle").addEventListener("click", toggleTheme);
 
 applyTheme(localStorage.getItem("vinted_theme"));
 syncMenuForViewport();
@@ -630,15 +649,9 @@ $("#userForm").addEventListener("submit", async (event) => {
   }
 });
 
-$("#accountPasswordToggle").addEventListener("click", () => {
-  const form = $("#accountPasswordForm");
-  const message = $("#accountPasswordMessage");
-  form.hidden = false;
-  $("#accountPasswordToggle").hidden = true;
-  message.textContent = "";
-  message.classList.remove("error");
-  form.querySelector('input[name="password"]').focus();
-});
+$("#accountPasswordToggle").addEventListener("click", showAccountPasswordForm);
+
+$("#accountSecurityShortcut").addEventListener("click", showAccountPasswordForm);
 
 $("#accountPasswordCancel").addEventListener("click", () => {
   const form = $("#accountPasswordForm");

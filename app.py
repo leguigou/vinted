@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("VINTED_ALERTS_DB_PATH", ROOT / "vinted_alerts.db"))
 HOST = os.environ.get("VINTED_ALERTS_HOST", "127.0.0.1")
-PORT = int(os.environ.get("VINTED_ALERTS_PORT", "8787"))
+PORT = int(os.environ.get("VINTED_ALERTS_PORT", "8790"))
 DEFAULT_INTERVAL_SECONDS = 180
 ADMIN_USERNAME = os.environ.get("VINTED_ALERTS_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD_ENV = os.environ.get("VINTED_ALERTS_ADMIN_PASSWORD")
