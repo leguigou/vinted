@@ -6,6 +6,7 @@ const VIEW_TITLES = {
   account: "Mon compte",
   users: "Utilisateurs",
   telegram: "Telegram",
+  settings: "Parametres",
   "new-search": "Nouvelle recherche",
   searches: "Recherches actives",
   items: "Historique alertes",
@@ -119,6 +120,17 @@ function showTelegramHelp(message, isError = false) {
   const help = $("#telegramHelp");
   help.textContent = message;
   help.classList.toggle("error", isError);
+}
+
+function showAppSettingsHelp(message, isError = false) {
+  const help = $("#appSettingsHelp");
+  help.textContent = message;
+  help.classList.toggle("error", isError);
+}
+
+function updateRandomIntervalLabel(value) {
+  const percent = Number(value || 0);
+  $("#randomIntervalValue").textContent = `${percent}%`;
 }
 
 function menuControls() {
@@ -323,6 +335,9 @@ function renderState(state, dashboardItems = { items: [] }) {
   if (settings.telegram_chat_id) {
     $('[name="telegram_chat_id"]').placeholder = settings.telegram_chat_id;
   }
+  const randomIntervalInput = $('[name="random_interval_percent"]');
+  randomIntervalInput.value = settings.random_interval_percent ?? 5;
+  updateRandomIntervalLabel(randomIntervalInput.value);
 
   const runtime = state.runtime;
   const bits = [];
@@ -694,6 +709,21 @@ $("#settingsForm").addEventListener("submit", async (event) => {
   } catch (error) {
     showTelegramHelp(error.message, true);
   }
+});
+
+$("#appSettingsForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await api("/api/settings", { method: "POST", body: JSON.stringify(formData(event.target)) });
+    showAppSettingsHelp("Parametres enregistres.");
+    await loadState();
+  } catch (error) {
+    showAppSettingsHelp(error.message, true);
+  }
+});
+
+$('[name="random_interval_percent"]').addEventListener("input", (event) => {
+  updateRandomIntervalLabel(event.target.value);
 });
 
 $("#searchForm").addEventListener("submit", async (event) => {

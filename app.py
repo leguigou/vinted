@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import sqlite3
 import secrets
 import hashlib
@@ -23,6 +24,9 @@ DB_PATH = Path(os.environ.get("VINTED_ALERTS_DB_PATH", ROOT / "vinted_alerts.db"
 HOST = os.environ.get("VINTED_ALERTS_HOST", "127.0.0.1")
 PORT = int(os.environ.get("VINTED_ALERTS_PORT", "8790"))
 DEFAULT_INTERVAL_SECONDS = 180
+DEFAULT_RANDOM_INTERVAL_PERCENT = 5
+MAX_RANDOM_INTERVAL_PERCENT = 90
+RANDOM_INTERVAL_PERCENT_STEP = 5
 ADMIN_USERNAME = os.environ.get("VINTED_ALERTS_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD_ENV = os.environ.get("VINTED_ALERTS_ADMIN_PASSWORD")
 ADMIN_PASSWORD = ADMIN_PASSWORD_ENV or "admin123"
@@ -296,6 +300,21 @@ def set_setting(user_id: int, key: str, value: str) -> None:
             "on conflict(user_id, key) do update set value = excluded.value",
             (user_id, key, value),
         )
+
+
+def normalize_random_interval_percent(value: object) -> int:
+    try:
+        percent = int(value)
+    except (TypeError, ValueError):
+        percent = DEFAULT_RANDOM_INTERVAL_PERCENT
+    percent = min(max(percent, 0), MAX_RANDOM_INTERVAL_PERCENT)
+    return round(percent / RANDOM_INTERVAL_PERCENT_STEP) * RANDOM_INTERVAL_PERCENT_STEP
+
+
+def get_random_interval_percent(user_id: int) -> int:
+    return normalize_random_interval_percent(
+        get_setting(user_id, "random_interval_percent", str(DEFAULT_RANDOM_INTERVAL_PERCENT))
+    )
 
 
 def list_searches(user_id: int | None = None) -> list[dict]:
@@ -751,12 +770,18 @@ def worker_loop() -> None:
     while not worker_stop.is_set():
         interval = DEFAULT_INTERVAL_SECONDS
         searches = list_searches()
-        if searches:
+        enabled_searches = [search for search in searches if search["enabled"]]
+        if enabled_searches:
             interval = min(
                 max(int(search["interval_seconds"]), 60)
-                for search in searches
-                if search["enabled"]
-            ) if any(search["enabled"] for search in searches) else DEFAULT_INTERVAL_SECONDS
+                for search in enabled_searches
+            )
+            jitter_percent = max(
+                get_random_interval_percent(int(search["user_id"]))
+                for search in enabled_searches
+            )
+            if jitter_percent:
+                interval += random.randint(0, max(0, round(interval * jitter_percent / 100)))
 
         run_checks_once(notify=True)
         worker_stop.wait(interval)
@@ -991,6 +1016,7 @@ def api_state(user: dict) -> dict:
         "settings": {
             "telegram_bot_token": mask_secret(get_setting(user["id"], "telegram_bot_token")),
             "telegram_chat_id": get_setting(user["id"], "telegram_chat_id"),
+            "random_interval_percent": get_random_interval_percent(user["id"]),
         },
         "searches": list_searches(user["id"]),
         "users": list_users() if user["is_admin"] else [],
@@ -1103,6 +1129,11 @@ def save_settings(user_id: int, payload: dict) -> None:
         set_setting(user_id, "telegram_bot_token", token)
     if chat_id:
         set_setting(user_id, "telegram_chat_id", chat_id)
+    if "random_interval_percent" in payload:
+        random_interval_percent = normalize_random_interval_percent(
+            payload.get("random_interval_percent")
+        )
+        set_setting(user_id, "random_interval_percent", str(random_interval_percent))
 
 
 def create_search(user_id: int, payload: dict) -> None:

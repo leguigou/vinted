@@ -12,7 +12,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="stylesheet" href="/styles.css?v=1.0.30" />
+    <link rel="stylesheet" href="/styles.css?v=1.0.33" />
   </head>
   <body>
     <main id="loginShell" class="shell authShell">
@@ -33,7 +33,7 @@
             <div id="loginError" class="help error"></div>
           </form>
         </section>
-        <small class="appVersion">Version 1.0.30</small>
+        <small class="appVersion">Version 1.0.33</small>
       </div>
     </main>
 
@@ -169,7 +169,7 @@
               </span>
               <span class="shortcutChevron" aria-hidden="true"></span>
             </button>
-            <button class="accountShortcut" type="button" data-view="new-search">
+            <button class="accountShortcut" type="button" data-view="settings">
               <span class="shortcutIconBubble"><span class="shortcutIcon iconGlyph iconSettings" aria-hidden="true"></span></span>
               <span>
                 <strong>Parametres</strong>
@@ -226,6 +226,22 @@
             </div>
           </form>
           <div id="telegramHelp" class="help"></div>
+        </section>
+
+        <section class="panel viewPanel" data-panel="settings">
+          <h2>Parametres</h2>
+          <form id="appSettingsForm" class="stack">
+            <label class="rangeLabel">
+              <span>
+                Aleatoire de verification
+                <strong id="randomIntervalValue">5%</strong>
+              </span>
+              <input name="random_interval_percent" type="range" min="0" max="90" step="5" value="5" />
+              <small>Ajoute un delai aleatoire en plus de l'intervalle defini pour simuler un rythme moins automatique.</small>
+            </label>
+            <button type="submit">Enregistrer</button>
+          </form>
+          <div id="appSettingsHelp" class="help"></div>
         </section>
 
         <section class="panel viewPanel" data-panel="new-search">
@@ -289,6 +305,6 @@
       </nav>
     </main>
 
-    <script src="/app.js?v=1.0.30"></script>
+    <script src="/app.js?v=1.0.33"></script>
   </body>
 </html>

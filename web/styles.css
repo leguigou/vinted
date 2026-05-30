@@ -15,7 +15,7 @@
   --photo-bg: #e5ebe5;
   --accent: #64e6d8;
   --accent-soft: #dff8f4;
-  --active-nav-ink: #000000;
+  --active-nav-ink: var(--primary-dark);
   --logout-bg: #ffe8e8;
   --logout-ink: #b9232d;
   --shadow: 0 14px 34px rgb(15 43 38 / 10%);
@@ -39,7 +39,7 @@ body[data-theme="dark"] {
   --photo-bg: #22312d;
   --accent: #63ded4;
   --accent-soft: #183331;
-  --active-nav-ink: #000000;
+  --active-nav-ink: var(--primary-dark);
   --logout-bg: #3b1f23;
   --logout-ink: #ff9ca9;
   --shadow: 0 14px 34px rgb(0 0 0 / 28%);
@@ -706,6 +706,33 @@ body[data-theme="dark"] .themeIcon::after {
   min-height: 43px;
 }
 
+.rangeLabel {
+  display: grid;
+  gap: 8px;
+}
+
+.rangeLabel > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rangeLabel strong {
+  color: var(--primary-dark);
+  font-size: 13px;
+}
+
+.rangeLabel small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.rangeLabel input[type="range"] {
+  accent-color: var(--primary);
+  padding: 0;
+}
+
 .compactList,
 .compactRow {
   gap: 8px;
@@ -1118,6 +1145,7 @@ body[data-theme="dark"] .themeIcon::after {
 
 @media (max-width: 780px) {
   body {
+    --active-nav-ink: #000000;
     overflow-x: hidden;
     background: var(--bg);
   }

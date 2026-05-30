@@ -183,4 +183,5 @@ L'application garde en base les articles deja vus pour eviter les doublons.
 - La base SQLite locale est creee dans `vinted_alerts.db`.
 - Garde la fenetre PowerShell ouverte pour continuer la surveillance sans Docker.
 - Evite les intervalles trop courts. Une verification toutes les 2 a 5 minutes est plus raisonnable.
+- Dans les parametres, `Aleatoire de verification` ajoute jusqu'a ce pourcentage de delai en plus de l'intervalle defini, par tranches de 5 %, avec `5 %` par defaut.
 - Si Vinted change son API ou bloque les requetes automatisees, l'interface affichera l'erreur dans la recherche concernee.
