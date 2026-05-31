@@ -72,6 +72,10 @@
             <span class="navIcon iconGlyph iconHistory" aria-hidden="true"></span>
             <span class="navText">Historique alertes</span>
           </button>
+          <button class="navItem" type="button" data-view="prices">
+            <span class="navIcon iconGlyph iconPrices" aria-hidden="true"></span>
+            <span class="navText">Analyse prix</span>
+          </button>
           <button class="navItem" type="button" data-view="account">
             <span class="navIcon iconGlyph iconUser" aria-hidden="true"></span>
             <span class="navText">Mon compte</span>
@@ -283,6 +287,14 @@
             <button type="button" id="itemsNext">Suivant</button>
           </div>
         </section>
+
+        <section class="panel viewPanel" data-panel="prices">
+          <div class="sectionTitle">
+            <h2>Analyse des prix</h2>
+            <span id="priceSummary" class="muted"></span>
+          </div>
+          <div id="priceAnalytics" class="priceAnalytics"></div>
+        </section>
       </section>
 
       <nav class="bottomNav" aria-label="Navigation mobile">
@@ -302,9 +314,13 @@
           <span class="bottomIconPill"><span class="iconGlyph iconBell" aria-hidden="true"></span></span>
           <span>Alertes</span>
         </button>
+        <button class="bottomNavItem" type="button" data-view="prices">
+          <span class="bottomIconPill"><span class="iconGlyph iconPrices" aria-hidden="true"></span></span>
+          <span>Prix</span>
+        </button>
       </nav>
     </main>
 
-    <script src="/app.js?v=1.0.34"></script>
+    <script src="/app.js?v=1.0.35"></script>
   </body>
 </html>

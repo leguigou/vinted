@@ -86,6 +86,10 @@ body[data-theme="dark"] {
   --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 3-6.7'/%3E%3Cpath d='M3 4v5h5M12 7v5l3 2'/%3E%3C/svg%3E");
 }
 
+.iconPrices {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19V5'/%3E%3Cpath d='M4 19h16'/%3E%3Cpath d='m7 15 3-4 3 2 5-7'/%3E%3Cpath d='M16 6h2v2'/%3E%3C/svg%3E");
+}
+
 .iconUser {
   --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M5 20a7 7 0 0 1 14 0'/%3E%3C/svg%3E");
 }
@@ -1144,6 +1148,205 @@ body[data-theme="dark"] .themeIcon::after {
   margin-top: 7px;
 }
 
+.priceAnalytics {
+  display: grid;
+  gap: 16px;
+}
+
+.priceOverview,
+.priceCard {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.priceOverview h3,
+.priceCard h3 {
+  margin: 0;
+}
+
+.dealStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.dealChip,
+.priceItem {
+  color: inherit;
+  text-decoration: none;
+}
+
+.dealChip {
+  display: grid;
+  gap: 4px;
+  min-height: 84px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel);
+}
+
+.dealChip strong,
+.dealChip span,
+.dealChip small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dealChip span {
+  color: var(--primary-dark);
+  font-weight: 800;
+}
+
+.dealChip small {
+  color: var(--muted);
+}
+
+.dealChip.deal,
+.priceItem.deal {
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--panel));
+}
+
+.priceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.priceCard {
+  display: grid;
+  gap: 14px;
+}
+
+.priceCard header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.priceCard header small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.trendBadge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.trendBadge.down {
+  color: var(--primary-dark);
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--line));
+}
+
+.trendBadge.up {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+}
+
+.priceStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.priceStats span {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.priceStats small,
+.priceStats strong {
+  display: block;
+}
+
+.priceStats small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.priceStats strong {
+  margin-top: 5px;
+  font-size: 15px;
+}
+
+.miniChart {
+  display: flex;
+  align-items: end;
+  gap: 5px;
+  height: 96px;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 0 0;
+}
+
+.miniChart span {
+  position: relative;
+  flex: 1;
+  min-width: 6px;
+  border-radius: 4px 4px 0 0;
+  background: color-mix(in srgb, var(--primary) 62%, var(--accent-soft));
+}
+
+.miniChart i {
+  position: absolute;
+  right: 0;
+  top: -18px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.latestPriceItems {
+  display: grid;
+  gap: 8px;
+}
+
+.priceItem {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.priceItem img,
+.priceItem .noPhoto {
+  width: 46px;
+  height: 46px;
+  border-radius: 6px;
+}
+
+.priceItem strong,
+.priceItem small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.priceItem small {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
 @media (max-width: 780px) {
   body {
     --active-nav-ink: #000000;
@@ -1359,7 +1562,7 @@ body[data-theme="dark"] .themeIcon::after {
     left: 0;
     z-index: 17;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 2px;
     min-height: 70px;
     border: 1px solid var(--line);
@@ -1393,7 +1596,7 @@ body[data-theme="dark"] .themeIcon::after {
   .bottomIconPill {
     display: grid;
     place-items: center;
-    width: 42px;
+    width: 38px;
     height: 28px;
     border-radius: 999px;
     color: inherit;
@@ -1620,6 +1823,23 @@ body[data-theme="dark"] .themeIcon::after {
 
   .pagination button {
     width: 100%;
+  }
+
+  .priceGrid,
+  .dealStrip {
+    grid-template-columns: 1fr;
+  }
+
+  .priceCard header {
+    display: grid;
+  }
+
+  .trendBadge {
+    justify-self: start;
+  }
+
+  .priceStats {
+    grid-template-columns: 1fr;
   }
 }
 

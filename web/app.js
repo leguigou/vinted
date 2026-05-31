@@ -10,6 +10,7 @@ const VIEW_TITLES = {
   "new-search": "Nouvelle recherche",
   searches: "Recherches actives",
   items: "Historique alertes",
+  prices: "Analyse prix",
 };
 let itemsPage = 1;
 let isAuthenticated = false;
@@ -229,6 +230,12 @@ async function loadState() {
   } catch (error) {
     $("#items").innerHTML = '<p class="empty">Impossible de charger les articles pour le moment.</p>';
     $("#status").textContent = error.message;
+  }
+  try {
+    renderPriceAnalytics(await api("/api/price-analytics"));
+  } catch (error) {
+    $("#priceAnalytics").innerHTML = '<p class="empty">Impossible de charger l analyse des prix.</p>';
+    $("#priceSummary").textContent = error.message;
   }
 }
 
@@ -531,6 +538,126 @@ function renderUsers(state) {
       }
     });
   });
+}
+
+function formatMoney(value, currency = "EUR") {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "N/A";
+  try {
+    return new Intl.NumberFormat("fr-FR", {
+      style: "currency",
+      currency: currency || "EUR",
+      maximumFractionDigits: 2,
+    }).format(Number(value));
+  } catch {
+    return `${Number(value).toFixed(2)} ${currency || "EUR"}`;
+  }
+}
+
+function formatDelta(value) {
+  if (value === null || value === undefined) return "";
+  const sign = Number(value) > 0 ? "+" : "";
+  return `${sign}${Number(value).toFixed(1)}%`;
+}
+
+function renderMiniChart(history, currency) {
+  const points = history || [];
+  if (!points.length) return '<div class="miniChart emptyChart"></div>';
+  const values = points.map((point) => Number(point.median || point.average || 0));
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1, max - min);
+  return `
+    <div class="miniChart" aria-label="Evolution des prix">
+      ${points
+        .map((point, index) => {
+          const value = Number(point.median || point.average || 0);
+          const height = 18 + ((value - min) / range) * 62;
+          return `
+            <span
+              style="height:${height}%"
+              title="${escapeAttr(point.date)} - mediane ${escapeAttr(formatMoney(value, currency))}"
+            >
+              <i>${index === points.length - 1 ? escapeHtml(formatMoney(value, currency)) : ""}</i>
+            </span>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderPriceAnalytics(data) {
+  const container = $("#priceAnalytics");
+  const summary = $("#priceSummary");
+  const searches = data.searches || [];
+  summary.textContent = searches.length ? `${searches.length} famille(s) suivie(s)` : "";
+  if (!searches.length) {
+    container.innerHTML = '<p class="empty">Ajoute une recherche et laisse quelques articles remonter pour construire une cote.</p>';
+    return;
+  }
+
+  const deals = data.best_deals || [];
+  const dealsHtml = deals.length
+    ? `
+      <div class="dealStrip">
+        ${deals
+          .map((item) => `
+            <a class="dealChip ${escapeAttr(item.position.status)}" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${escapeHtml(formatMoney(item.price_amount, item.currency))}</span>
+              <small>${escapeHtml(item.search_name)} · ${escapeHtml(item.position.label)} ${escapeHtml(formatDelta(item.position.delta_percent))}</small>
+            </a>
+          `)
+          .join("")}
+      </div>
+    `
+    : '<p class="empty compactEmpty">Aucune bonne affaire nette dans les derniers articles compares.</p>';
+
+  container.innerHTML = `
+    <section class="priceOverview">
+      <div>
+        <h3>Meilleures opportunites</h3>
+        ${dealsHtml}
+      </div>
+    </section>
+    <div class="priceGrid">
+      ${searches
+        .map((search) => `
+          <article class="priceCard">
+            <header>
+              <div>
+                <h3>${escapeHtml(search.search_name)}</h3>
+                <small>${search.count} article(s) avec prix exploitable</small>
+              </div>
+              <span class="trendBadge ${escapeAttr(search.trend.direction)}">
+                ${escapeHtml(search.trend.label)}
+                ${search.trend.delta_percent === null ? "" : `<b>${escapeHtml(formatDelta(search.trend.delta_percent))}</b>`}
+              </span>
+            </header>
+            <div class="priceStats">
+              <span><small>Mediane</small><strong>${escapeHtml(formatMoney(search.median, search.currency))}</strong></span>
+              <span><small>Moyenne</small><strong>${escapeHtml(formatMoney(search.average, search.currency))}</strong></span>
+              <span><small>Bas / haut</small><strong>${escapeHtml(formatMoney(search.minimum, search.currency))} - ${escapeHtml(formatMoney(search.maximum, search.currency))}</strong></span>
+            </div>
+            ${renderMiniChart(search.history, search.currency)}
+            <div class="latestPriceItems">
+              ${(search.latest_items || [])
+                .map((item) => `
+                  <a class="priceItem ${escapeAttr(item.position.status)}" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">
+                    ${item.photo_url ? `<img src="${escapeHtml(item.photo_url)}" alt="" loading="lazy" />` : '<span class="noPhoto"></span>'}
+                    <span>
+                      <strong>${escapeHtml(item.title)}</strong>
+                      <small>${escapeHtml(item.price || formatMoney(item.price_amount, item.currency))} · ${escapeHtml(item.position.label)} ${escapeHtml(formatDelta(item.position.delta_percent))}</small>
+                    </span>
+                  </a>
+                `)
+                .join("")}
+            </div>
+          </article>
+        `)
+        .join("")}
+    </div>
+  `;
 }
 
 function renderItems(data) {

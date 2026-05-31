@@ -7,6 +7,7 @@ import sqlite3
 import secrets
 import hashlib
 import hmac
+import re
 import threading
 import time
 import traceback
@@ -192,6 +193,8 @@ def init_db() -> None:
                 search_id integer not null,
                 title text not null,
                 price text,
+                price_amount real,
+                currency text,
                 url text not null,
                 photo_url text,
                 created_at text not null,
@@ -267,6 +270,8 @@ def migrate_multi_user_schema(conn: sqlite3.Connection) -> None:
                 search_id integer not null,
                 title text not null,
                 price text,
+                price_amount real,
+                currency text,
                 url text not null,
                 photo_url text,
                 created_at text not null,
@@ -281,6 +286,43 @@ def migrate_multi_user_schema(conn: sqlite3.Connection) -> None:
             from seen_items_old;
             drop table seen_items_old;
             """
+        )
+        seen_columns = table_columns(conn, "seen_items")
+    if "price_amount" not in seen_columns:
+        conn.execute("alter table seen_items add column price_amount real")
+    if "currency" not in seen_columns:
+        conn.execute("alter table seen_items add column currency text")
+    backfill_seen_item_prices(conn)
+
+
+def parse_price_value(value: object) -> tuple[float | None, str]:
+    if value is None:
+        return None, ""
+    text = str(value).strip()
+    if not text:
+        return None, ""
+    currency = "EUR" if "€" in text or "eur" in text.lower() else ""
+    match = re.search(r"(\d+(?:[\s\u00a0]?\d{3})*(?:[,.]\d+)?)", text)
+    if not match:
+        return None, currency
+    amount_text = match.group(1).replace("\u00a0", "").replace(" ", "").replace(",", ".")
+    try:
+        return round(float(amount_text), 2), currency
+    except ValueError:
+        return None, currency
+
+
+def backfill_seen_item_prices(conn: sqlite3.Connection) -> None:
+    rows = conn.execute(
+        "select id, price from seen_items where price_amount is null and coalesce(price, '') <> ''"
+    ).fetchall()
+    for row in rows:
+        amount, currency = parse_price_value(row["price"])
+        if amount is None:
+            continue
+        conn.execute(
+            "update seen_items set price_amount = ?, currency = coalesce(nullif(currency, ''), ?) where id = ?",
+            (amount, currency or "EUR", row["id"]),
         )
 
 
@@ -433,6 +475,9 @@ def normalize_vinted_items(data: dict) -> list[dict]:
             price = ""
         else:
             price = str(price)
+        price_amount, currency = parse_price_value(price)
+        if not currency and price_amount is not None:
+            currency = "EUR"
 
         photo_url = ""
         photo = item.get("photo")
@@ -446,6 +491,8 @@ def normalize_vinted_items(data: dict) -> list[dict]:
                     "id": item_id,
                     "title": title,
                     "price": price,
+                    "price_amount": price_amount,
+                    "currency": currency,
                     "url": url,
                     "photo_url": photo_url,
                 }
@@ -670,15 +717,17 @@ def check_search(search: sqlite3.Row, notify: bool = True) -> int:
                 conn.execute(
                     """
                     insert or ignore into seen_items(
-                        item_id, search_id, title, price, url, photo_url,
+                        item_id, search_id, title, price, price_amount, currency, url, photo_url,
                         created_at, notified_at
-                    ) values(?, ?, ?, ?, ?, ?, ?, null)
+                    ) values(?, ?, ?, ?, ?, ?, ?, ?, ?, null)
                     """,
                     (
                         item["id"],
                         search_id,
                         item["title"],
                         item["price"],
+                        item.get("price_amount"),
+                        item.get("currency"),
                         item["url"],
                         item["photo_url"],
                         now_iso(),
@@ -712,15 +761,17 @@ def check_search(search: sqlite3.Row, notify: bool = True) -> int:
             conn.execute(
                 """
                 insert into seen_items(
-                    item_id, search_id, title, price, url, photo_url,
+                    item_id, search_id, title, price, price_amount, currency, url, photo_url,
                     created_at, notified_at
-                ) values(?, ?, ?, ?, ?, ?, ?, ?)
+                ) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     item["id"],
                     search_id,
                     item["title"],
                     item["price"],
+                    item.get("price_amount"),
+                    item.get("currency"),
                     item["url"],
                     item["photo_url"],
                     now_iso(),
@@ -860,6 +911,9 @@ class Handler(BaseHTTPRequestHandler):
                 query = urllib.parse.parse_qs(parsed.query)
                 limit = query_int(query, "limit", 10)
                 self.send_json(dashboard_items(user["id"], limit=limit))
+            elif parsed.path == "/api/price-analytics":
+                user = self.require_user()
+                self.send_json(price_analytics(user["id"]))
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
         except PermissionError as exc:
@@ -1234,15 +1288,17 @@ def seed_seen_items(search_id: int, url: str) -> None:
             conn.execute(
                 """
                 insert or ignore into seen_items(
-                    item_id, search_id, title, price, url, photo_url,
+                    item_id, search_id, title, price, price_amount, currency, url, photo_url,
                     created_at, notified_at
-                ) values(?, ?, ?, ?, ?, ?, ?, null)
+                ) values(?, ?, ?, ?, ?, ?, ?, ?, ?, null)
                 """,
                 (
                     item["id"],
                     search_id,
                     item["title"],
                     item["price"],
+                    item.get("price_amount"),
+                    item.get("currency"),
                     item["url"],
                     item["photo_url"],
                     now_iso(),
@@ -1343,6 +1399,139 @@ def dashboard_items(user_id: int, limit: int = 10) -> dict:
             (user_id, limit),
         ).fetchall()
     return {"items": [dict(row) for row in rows], "limit": limit}
+
+
+def median(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def rounded(value: float | None) -> float | None:
+    return round(value, 2) if value is not None else None
+
+
+def price_position(price: float | None, reference: float | None) -> dict:
+    if price is None or not reference:
+        return {"status": "unknown", "label": "Prix non comparable", "delta_percent": None}
+    delta = ((price - reference) / reference) * 100
+    if delta <= -20:
+        status, label = "deal", "Tres bonne affaire"
+    elif delta <= -10:
+        status, label = "good", "Moins cher que la normale"
+    elif delta >= 20:
+        status, label = "expensive", "Plus cher que la normale"
+    elif delta >= 10:
+        status, label = "high", "Un peu au-dessus"
+    else:
+        status, label = "normal", "Prix normal"
+    return {"status": status, "label": label, "delta_percent": rounded(delta)}
+
+
+def trend_label(first: float | None, latest: float | None) -> dict:
+    if not first or latest is None:
+        return {"direction": "flat", "label": "Pas assez de donnees", "delta_percent": None}
+    delta = ((latest - first) / first) * 100
+    if delta <= -8:
+        direction, label = "down", "Prix en baisse"
+    elif delta >= 8:
+        direction, label = "up", "Prix en hausse"
+    else:
+        direction, label = "flat", "Prix stable"
+    return {"direction": direction, "label": label, "delta_percent": rounded(delta)}
+
+
+def price_analytics(user_id: int) -> dict:
+    with db() as conn:
+        rows = conn.execute(
+            """
+            select i.search_id, s.name as search_name, i.title, i.price, i.price_amount,
+                   coalesce(i.currency, 'EUR') as currency, i.url, i.photo_url, i.created_at
+            from seen_items i
+            join searches s on s.id = i.search_id
+            where s.user_id = ?
+            order by i.created_at asc, i.id asc
+            """,
+            (user_id,),
+        ).fetchall()
+
+    grouped: dict[int, list[dict]] = {}
+    for row in rows:
+        item = dict(row)
+        amount = item.get("price_amount")
+        if amount is None:
+            amount, currency = parse_price_value(item.get("price"))
+            item["price_amount"] = amount
+            item["currency"] = item.get("currency") or currency or "EUR"
+        if item["price_amount"] is None:
+            continue
+        item["price_amount"] = float(item["price_amount"])
+        grouped.setdefault(int(item["search_id"]), []).append(item)
+
+    searches = []
+    best_deals = []
+    for search_id, items in grouped.items():
+        prices = [item["price_amount"] for item in items]
+        reference = median(prices)
+        first_window = prices[: max(1, len(prices) // 3)]
+        latest_window = prices[-max(1, len(prices) // 3):]
+        daily: dict[str, list[float]] = {}
+        for item in items:
+            day = str(item["created_at"] or "")[:10] or "Inconnu"
+            daily.setdefault(day, []).append(item["price_amount"])
+
+        history = [
+            {
+                "date": day,
+                "count": len(day_prices),
+                "average": rounded(sum(day_prices) / len(day_prices)),
+                "median": rounded(median(day_prices)),
+                "minimum": rounded(min(day_prices)),
+                "maximum": rounded(max(day_prices)),
+            }
+            for day, day_prices in sorted(daily.items())
+        ]
+
+        assessed_items = []
+        for item in reversed(items[-8:]):
+            position = price_position(item["price_amount"], reference)
+            assessed = {
+                "title": item["title"],
+                "price": item["price"],
+                "price_amount": rounded(item["price_amount"]),
+                "currency": item["currency"] or "EUR",
+                "url": item["url"],
+                "photo_url": item["photo_url"],
+                "created_at": item["created_at"],
+                "position": position,
+            }
+            assessed_items.append(assessed)
+            if position["status"] in {"deal", "good"}:
+                best_deals.append({**assessed, "search_id": search_id, "search_name": item["search_name"]})
+
+        searches.append(
+            {
+                "search_id": search_id,
+                "search_name": items[0]["search_name"],
+                "currency": items[-1].get("currency") or "EUR",
+                "count": len(items),
+                "average": rounded(sum(prices) / len(prices)),
+                "median": rounded(reference),
+                "minimum": rounded(min(prices)),
+                "maximum": rounded(max(prices)),
+                "trend": trend_label(median(first_window), median(latest_window)),
+                "history": history[-14:],
+                "latest_items": assessed_items,
+            }
+        )
+
+    searches.sort(key=lambda search: search["search_name"].lower())
+    best_deals.sort(key=lambda item: item["position"]["delta_percent"] or 0)
+    return {"searches": searches, "best_deals": best_deals[:10]}
 
 
 def main() -> None:
