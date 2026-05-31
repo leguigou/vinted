@@ -128,6 +128,13 @@ function showAppSettingsHelp(message, isError = false) {
   help.classList.toggle("error", isError);
 }
 
+function showCheckNowError(message) {
+  const status = $("#status");
+  if (!status) return;
+  status.textContent = `erreur: ${message}`;
+  status.classList.add("error");
+}
+
 function updateRandomIntervalLabel(value) {
   const percent = Number(value || 0);
   $("#randomIntervalValue").textContent = `${percent}%`;
@@ -345,6 +352,7 @@ function renderState(state, dashboardItems = { items: [] }) {
   if (runtime.last_check_finished_at) bits.push(`dernier check: ${runtime.last_check_finished_at}`);
   if (runtime.last_error) bits.push(`erreur: ${runtime.last_error}`);
   $("#status").textContent = bits.join(" · ");
+  $("#status").classList.toggle("error", Boolean(runtime.last_error));
 
   const searches = $("#searches");
   if (!state.searches.length) {
@@ -747,6 +755,16 @@ async function checkNow() {
       button.textContent = `${result.new_items} nouveau(x)`;
     });
     await loadState();
+  } catch (error) {
+    buttons.forEach((button) => {
+      button.textContent = "Erreur";
+    });
+    showCheckNowError(error.message);
+    try {
+      await loadState();
+    } catch {
+      // Keep the direct error message visible if the state refresh also fails.
+    }
   } finally {
     setTimeout(() => {
       buttons.forEach((button) => {

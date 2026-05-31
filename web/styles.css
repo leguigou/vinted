@@ -650,7 +650,8 @@ body[data-theme="dark"] .themeIcon::after {
   margin-top: 12px;
 }
 
-.help.error {
+.help.error,
+.muted.error {
   color: var(--danger);
 }
 

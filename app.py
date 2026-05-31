@@ -483,19 +483,38 @@ def fetch_vinted_json_from_api(api_url: str) -> dict:
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             charset = response.headers.get_content_charset() or "utf-8"
-            data = json.loads(response.read().decode(charset))
+            try:
+                data = json.loads(response.read().decode(charset))
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    "Reponse invalide du proxy de fetch. "
+                    "Verifie que l'URL proxy pointe bien vers l'API de fetch."
+                ) from exc
     except urllib.error.HTTPError as exc:
         detail = read_http_error(exc)
-        raise RuntimeError(f"API fetch HTTP {exc.code}: {detail}") from exc
+        raise RuntimeError(f"Proxy de fetch HTTP {exc.code}: {detail}") from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"API fetch inaccessible: {exc.reason}") from exc
+        raise RuntimeError(fetch_api_unavailable_message(exc.reason)) from exc
+    except OSError as exc:
+        raise RuntimeError(fetch_api_unavailable_message(exc)) from exc
 
     if not data.get("ok"):
-        raise RuntimeError(str(data.get("error") or "Erreur inconnue de l'API fetch."))
+        raise RuntimeError(
+            f"Proxy de fetch en erreur: {data.get('error') or 'Erreur inconnue.'}"
+        )
     result = data.get("data")
     if not isinstance(result, dict):
-        raise RuntimeError("Réponse invalide de l'API fetch.")
+        raise RuntimeError("Reponse invalide du proxy de fetch.")
     return result
+
+
+def fetch_api_unavailable_message(reason: object) -> str:
+    detail = str(reason).strip()
+    message = (
+        "Proxy de fetch inaccessible. "
+        "Verifie que l'URL proxy est bien demarree et repond."
+    )
+    return f"{message} Detail: {detail}" if detail else message
 
 
 def fetch_vinted_json_direct(api_url: str) -> dict:
@@ -724,7 +743,11 @@ def check_search(search: sqlite3.Row, notify: bool = True) -> int:
     return new_count
 
 
-def run_checks_once(notify: bool = True, user_id: int | None = None) -> int:
+def run_checks_once(
+    notify: bool = True,
+    user_id: int | None = None,
+    raise_on_error: bool = False,
+) -> int:
     global last_check_started_at, last_check_finished_at, last_error
 
     with state_lock:
@@ -762,6 +785,8 @@ def run_checks_once(notify: bool = True, user_id: int | None = None) -> int:
         with state_lock:
             last_error = str(exc)
             last_check_finished_at = now_iso()
+        if raise_on_error:
+            raise
         traceback.print_exc()
         return total
 
@@ -893,7 +918,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.update_search(user, parsed.path, payload)
             elif parsed.path == "/api/check-now":
                 user = self.require_user()
-                count = run_checks_once(notify=True, user_id=user["id"])
+                count = run_checks_once(notify=True, user_id=user["id"], raise_on_error=True)
                 self.send_json({"ok": True, "new_items": count})
             elif parsed.path == "/api/telegram/test":
                 user = self.require_user()
