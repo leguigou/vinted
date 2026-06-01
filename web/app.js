@@ -334,7 +334,7 @@ function renderDashboardSearches(container, searches, items) {
             <a class="sliderItem" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">
               <span class="sliderPhoto">
                 ${item.photo_url ? `<img src="${escapeHtml(item.photo_url)}" alt="" loading="lazy" />` : '<span class="noPhoto sliderNoPhoto"></span>'}
-                <span class="sliderPrice">${escapeHtml(item.price || "Prix non indique")}</span>
+                <span class="sliderPrice">${escapeHtml(displayItemPrice(item))}</span>
               </span>
               <strong>${escapeHtml(item.title)}</strong>
               <small class="sliderTime">
@@ -600,15 +600,40 @@ function renderUsers(state) {
 
 function formatMoney(value, currency = "EUR") {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "N/A";
-  try {
-    return new Intl.NumberFormat("fr-FR", {
-      style: "currency",
-      currency: currency || "EUR",
-      maximumFractionDigits: 2,
-    }).format(Number(value));
-  } catch {
-    return `${Number(value).toFixed(2)} ${currency || "EUR"}`;
+  const amount = Number(value);
+  const code = String(currency || "EUR").toUpperCase();
+  const formatted = new Intl.NumberFormat("fr-FR", {
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+  }).format(amount);
+  if (code === "EUR") return `${formatted}€`;
+  if (code === "USD") return `$${formatted}`;
+  if (code === "GBP") return `£${formatted}`;
+  return `${formatted} ${code}`;
+}
+
+function formatPriceText(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const hasEuro = /€|\bEUR\b/i.test(text);
+  const match = text.match(/(\d+(?:[\s\u00a0]?\d{3})*(?:[,.]\d+)?)/);
+  if (!match) {
+    return hasEuro ? text.replace(/\bEUR\b/gi, "€").replace(/\s+€/g, "€") : text;
   }
+  const amount = Number(match[1].replace(/[\s\u00a0]/g, "").replace(",", "."));
+  if (Number.isNaN(amount)) {
+    return hasEuro ? text.replace(/\bEUR\b/gi, "€").replace(/\s+€/g, "€") : text;
+  }
+  if (hasEuro) return formatMoney(amount, "EUR");
+  return text;
+}
+
+function displayItemPrice(item) {
+  return formatPriceText(item.price) || "Prix non indique";
+}
+
+function displayItemPriceWithFallback(item) {
+  return formatPriceText(item.price) || formatMoney(item.price_amount, item.currency);
 }
 
 function formatDelta(value) {
@@ -718,7 +743,7 @@ function renderPriceAnalytics(data) {
                     ${item.photo_url ? `<img src="${escapeHtml(item.photo_url)}" alt="" loading="lazy" />` : '<span class="noPhoto"></span>'}
                     <span>
                       <strong>${escapeHtml(item.title)}</strong>
-                      <small><b class="priceArrow">${escapeHtml(priceArrow(item.position.status))}</b>${escapeHtml(item.price || formatMoney(item.price_amount, item.currency))} · ${escapeHtml(item.position.label)} ${escapeHtml(formatDelta(item.position.delta_percent))}</small>
+                      <small><b class="priceArrow">${escapeHtml(priceArrow(item.position.status))}</b>${escapeHtml(displayItemPriceWithFallback(item))} · ${escapeHtml(item.position.label)} ${escapeHtml(formatDelta(item.position.delta_percent))}</small>
                     </span>
                   </a>
                 `)
@@ -757,7 +782,7 @@ function renderItems(data) {
         ${item.photo_url ? `<img src="${escapeHtml(item.photo_url)}" alt="" loading="lazy" />` : '<div class="noPhoto"></div>'}
         <div>
           <strong>${escapeHtml(item.title)}</strong>
-          <span>${escapeHtml(item.price || "Prix non indiqué")}</span>
+          <span>${escapeHtml(displayItemPrice(item).replace("Prix non indique", "Prix non indiqué"))}</span>
           <small>${escapeHtml(item.search_name)} · ${escapeHtml(item.created_at)}</small>
         </div>
       </a>
