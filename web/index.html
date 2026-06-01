@@ -279,28 +279,15 @@
               Recherche
               <input name="search_text" autocomplete="off" placeholder="Air Force 1 taille 42" />
             </label>
-            <div class="filterGrid">
+            <div class="priceRangeGrid">
               <label>
-                Prix
-                <input name="price_amount" type="number" min="0" step="1" inputmode="decimal" placeholder="ex. 30" />
+                Prix min
+                <input name="price_min" type="number" min="0" step="1" inputmode="decimal" placeholder="ex. 30" />
               </label>
-              <fieldset class="segmentedField">
-                <legend>Filtre prix</legend>
-                <div class="segmentedButtons">
-                  <label>
-                    <input type="radio" name="price_filter" value="max" checked />
-                    <span>Prix &lt;=</span>
-                  </label>
-                  <label>
-                    <input type="radio" name="price_filter" value="min" />
-                    <span>Prix &gt;=</span>
-                  </label>
-                  <label>
-                    <input type="radio" name="price_filter" value="none" />
-                    <span>Sans prix</span>
-                  </label>
-                </div>
-              </fieldset>
+              <label>
+                Prix max
+                <input name="price_max" type="number" min="0" step="1" inputmode="decimal" placeholder="ex. 80" />
+              </label>
             </div>
             </div>
             <label>

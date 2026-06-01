@@ -508,9 +508,9 @@ label {
   display: none;
 }
 
-.filterGrid {
+.priceRangeGrid {
   display: grid;
-  grid-template-columns: minmax(130px, 180px) minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   align-items: end;
 }
@@ -1841,7 +1841,7 @@ body[data-theme="dark"] .themeIcon::after {
   }
 
   .grid,
-  .filterGrid,
+  .priceRangeGrid,
   .row,
   .userForm,
   .editForm,
