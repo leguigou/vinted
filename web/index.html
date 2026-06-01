@@ -12,7 +12,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="stylesheet" href="/styles.css?v=1.0.34" />
+    <link rel="stylesheet" href="/styles.css?v=1.0.37" />
   </head>
   <body>
     <main id="loginShell" class="shell authShell">
@@ -250,20 +250,65 @@
 
         <section class="panel viewPanel" data-panel="new-search">
           <h2>Nouvelle recherche</h2>
-          <form id="searchForm" class="stack">
+          <form id="searchForm" class="stack searchBuilder">
+            <fieldset class="segmentedField searchModeField">
+              <legend>Mode d'ajout</legend>
+              <div class="segmentedButtons">
+                <label>
+                  <input type="radio" name="search_mode" value="manual" checked />
+                  <span>URL complete</span>
+                </label>
+                <label>
+                  <input type="radio" name="search_mode" value="simple" />
+                  <span>Recherche rapide</span>
+                </label>
+              </div>
+            </fieldset>
             <label>
               Nom
-              <input name="name" placeholder="Air Force 1 taille 42" required />
+              <input name="name" placeholder="Air Force 1 taille 42" />
             </label>
+            <div class="manualSearchFields" data-search-mode-panel="manual">
+              <label>
+                URL de recherche Vinted
+                <input name="manual_url" autocomplete="off" placeholder="https://www.vinted.fr/catalog?search_text=..." />
+              </label>
+            </div>
+            <div class="quickSearchFields" data-search-mode-panel="simple" hidden>
             <label>
-              URL de recherche Vinted
-              <input name="url" placeholder="https://www.vinted.fr/catalog?search_text=..." required />
+              Recherche
+              <input name="search_text" autocomplete="off" placeholder="Air Force 1 taille 42" />
             </label>
+            <div class="filterGrid">
+              <label>
+                Prix
+                <input name="price_amount" type="number" min="0" step="1" inputmode="decimal" placeholder="ex. 30" />
+              </label>
+              <fieldset class="segmentedField">
+                <legend>Filtre prix</legend>
+                <div class="segmentedButtons">
+                  <label>
+                    <input type="radio" name="price_filter" value="max" checked />
+                    <span>Prix &lt;=</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="price_filter" value="min" />
+                    <span>Prix &gt;=</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="price_filter" value="none" />
+                    <span>Sans prix</span>
+                  </label>
+                </div>
+              </fieldset>
+            </div>
+            </div>
             <label>
               Intervalle en secondes
               <input name="interval_seconds" type="number" min="60" value="180" />
             </label>
             <button type="submit">Ajouter la recherche</button>
+            <small id="searchFormHelp" class="help"></small>
           </form>
         </section>
 
@@ -321,6 +366,6 @@
       </nav>
     </main>
 
-    <script src="/app.js?v=1.0.35"></script>
+    <script src="/app.js?v=1.0.37"></script>
   </body>
 </html>

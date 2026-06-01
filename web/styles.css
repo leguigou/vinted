@@ -125,6 +125,11 @@ body {
   color: var(--ink);
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
 body.menuCollapsed .appLayout {
   grid-template-columns: 74px minmax(0, 1fr);
 }
@@ -482,6 +487,89 @@ label {
 .stack {
   display: grid;
   gap: 12px;
+}
+
+.searchBuilder {
+  max-width: 680px;
+}
+
+.searchModeField .segmentedButtons {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.manualSearchFields,
+.quickSearchFields {
+  display: grid;
+  gap: 12px;
+}
+
+.manualSearchFields[hidden],
+.quickSearchFields[hidden] {
+  display: none;
+}
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: minmax(130px, 180px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.segmentedField {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.segmentedField legend {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.segmentedButtons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.segmentedButtons label {
+  display: block;
+  min-width: 0;
+}
+
+.segmentedButtons input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmentedButtons span {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.segmentedButtons input:checked + span {
+  border-color: var(--primary);
+  background: var(--accent-soft);
+  color: var(--primary-dark);
+}
+
+.segmentedButtons input:focus-visible + span {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 label {
@@ -1198,7 +1286,6 @@ body[data-theme="dark"] .themeIcon::after {
 }
 
 .dealChip span {
-  color: var(--primary-dark);
   font-weight: 800;
 }
 
@@ -1207,9 +1294,55 @@ body[data-theme="dark"] .themeIcon::after {
 }
 
 .dealChip.deal,
-.priceItem.deal {
-  border-color: color-mix(in srgb, var(--primary) 55%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 70%, var(--panel));
+.dealChip.good,
+.priceItem.deal,
+.priceItem.good {
+  border-color: color-mix(in srgb, #168a48 58%, var(--line));
+  background: color-mix(in srgb, #dff7e9 68%, var(--panel));
+}
+
+.dealChip.deal span,
+.dealChip.good span,
+.dealChip.deal .priceArrow,
+.dealChip.good .priceArrow,
+.priceItem.deal .priceArrow,
+.priceItem.good .priceArrow {
+  color: #168a48;
+}
+
+.dealChip.high,
+.dealChip.expensive,
+.priceItem.high,
+.priceItem.expensive {
+  border-color: color-mix(in srgb, #c73636 52%, var(--line));
+  background: color-mix(in srgb, #ffe5e5 62%, var(--panel));
+}
+
+.dealChip.high span,
+.dealChip.expensive span,
+.dealChip.high .priceArrow,
+.dealChip.expensive .priceArrow,
+.priceItem.high .priceArrow,
+.priceItem.expensive .priceArrow {
+  color: #c73636;
+}
+
+.dealChip.normal,
+.priceItem.normal {
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.priceArrow,
+.trendArrow {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 5px;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .priceGrid {
@@ -1249,13 +1382,19 @@ body[data-theme="dark"] .themeIcon::after {
 }
 
 .trendBadge.down {
-  color: var(--primary-dark);
-  border-color: color-mix(in srgb, var(--primary) 40%, var(--line));
+  color: #168a48;
+  border-color: color-mix(in srgb, #168a48 45%, var(--line));
+  background: color-mix(in srgb, #dff7e9 72%, var(--surface));
 }
 
 .trendBadge.up {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+  color: #c73636;
+  border-color: color-mix(in srgb, #c73636 42%, var(--line));
+  background: color-mix(in srgb, #ffe5e5 70%, var(--surface));
+}
+
+.trendBadge.flat {
+  background: color-mix(in srgb, var(--line) 26%, var(--surface));
 }
 
 .priceStats {
@@ -1436,12 +1575,12 @@ body[data-theme="dark"] .themeIcon::after {
     padding: 18px 14px 0;
     box-shadow: 20px 0 38px rgb(24 32 28 / 16%);
     transform: none;
-    transition: left 180ms ease;
+    transition: transform 180ms ease;
   }
 
   body.menuCollapsed .sideMenu {
-    left: -320px;
-    transform: none;
+    left: 0;
+    transform: translateX(-110%);
   }
 
   body.menuOpen .sideMenu {
@@ -1702,6 +1841,7 @@ body[data-theme="dark"] .themeIcon::after {
   }
 
   .grid,
+  .filterGrid,
   .row,
   .userForm,
   .editForm,
@@ -1722,6 +1862,16 @@ body[data-theme="dark"] .themeIcon::after {
   .rowActions {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .segmentedButtons {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .segmentedButtons span {
+    min-height: 46px;
+    padding-inline: 6px;
+    font-size: 12px;
   }
 
   .actions button,

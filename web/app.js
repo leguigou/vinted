@@ -76,6 +76,64 @@ function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+function buildSearchPayload(form) {
+  const data = formData(form);
+  const mode = data.search_mode || "manual";
+  const searchText = String(data.search_text || "").trim();
+  const manualUrl = String(data.manual_url || "").trim();
+  const priceAmount = String(data.price_amount || "").trim().replace(",", ".");
+  const priceFilter = data.price_filter || "max";
+  const name = String(data.name || searchText || "Recherche Vinted").trim();
+
+  if (mode === "manual") {
+    if (!manualUrl) {
+      throw new Error("Colle une URL de recherche Vinted ou passe en recherche rapide.");
+    }
+    return {
+      name,
+      url: manualUrl,
+      interval_seconds: data.interval_seconds || "180",
+    };
+  }
+
+  if (!searchText) {
+    throw new Error("Tape une recherche ou colle une URL Vinted complete.");
+  }
+
+  const params = new URLSearchParams();
+  params.set("search_text", searchText);
+  params.set("order", "newest_first");
+  params.set("currency", "EUR");
+
+  if (priceAmount && priceFilter !== "none") {
+    params.set(priceFilter === "min" ? "price_from" : "price_to", priceAmount);
+  }
+
+  return {
+    name,
+    url: `https://www.vinted.fr/catalog?${params.toString()}`,
+    interval_seconds: data.interval_seconds || "180",
+  };
+}
+
+function syncSearchMode() {
+  const form = $("#searchForm");
+  if (!form) return;
+  const mode = form.querySelector('[name="search_mode"]:checked')?.value || "manual";
+  form.querySelectorAll("[data-search-mode-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.searchModePanel !== mode;
+  });
+}
+
+function syncSearchBuilderPriceState() {
+  const form = $("#searchForm");
+  if (!form) return;
+  const priceInput = form.querySelector('[name="price_amount"]');
+  const filter = form.querySelector('[name="price_filter"]:checked')?.value || "max";
+  priceInput.disabled = filter === "none";
+  if (filter === "none") priceInput.value = "";
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replaceAll("&", "&amp;")
@@ -158,6 +216,9 @@ function setMenuExpanded(expanded) {
     backdrop.hidden = !(MOBILE_MENU_QUERY.matches && isExpanded && isAuthenticated);
   }
   document.body.classList.toggle("menuOpen", MOBILE_MENU_QUERY.matches && isExpanded);
+  if (MOBILE_MENU_QUERY.matches && window.scrollX) {
+    window.scrollTo(0, window.scrollY);
+  }
 }
 
 function syncMenuForViewport() {
@@ -559,6 +620,18 @@ function formatDelta(value) {
   return `${sign}${Number(value).toFixed(1)}%`;
 }
 
+function priceArrow(status) {
+  if (["deal", "good"].includes(status)) return "↓";
+  if (["expensive", "high"].includes(status)) return "↑";
+  return "→";
+}
+
+function trendArrow(direction) {
+  if (direction === "down") return "↓";
+  if (direction === "up") return "↑";
+  return "→";
+}
+
 function renderMiniChart(history, currency) {
   const points = history || [];
   if (!points.length) return '<div class="miniChart emptyChart"></div>';
@@ -605,7 +678,7 @@ function renderPriceAnalytics(data) {
             <a class="dealChip ${escapeAttr(item.position.status)}" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">
               <strong>${escapeHtml(item.title)}</strong>
               <span>${escapeHtml(formatMoney(item.price_amount, item.currency))}</span>
-              <small>${escapeHtml(item.search_name)} · ${escapeHtml(item.position.label)} ${escapeHtml(formatDelta(item.position.delta_percent))}</small>
+              <small><b class="priceArrow">${escapeHtml(priceArrow(item.position.status))}</b>${escapeHtml(item.search_name)} · ${escapeHtml(item.position.label)} ${escapeHtml(formatDelta(item.position.delta_percent))}</small>
             </a>
           `)
           .join("")}
@@ -630,6 +703,7 @@ function renderPriceAnalytics(data) {
                 <small>${search.count} article(s) avec prix exploitable</small>
               </div>
               <span class="trendBadge ${escapeAttr(search.trend.direction)}">
+                <b class="trendArrow">${escapeHtml(trendArrow(search.trend.direction))}</b>
                 ${escapeHtml(search.trend.label)}
                 ${search.trend.delta_percent === null ? "" : `<b>${escapeHtml(formatDelta(search.trend.delta_percent))}</b>`}
               </span>
@@ -647,7 +721,7 @@ function renderPriceAnalytics(data) {
                     ${item.photo_url ? `<img src="${escapeHtml(item.photo_url)}" alt="" loading="lazy" />` : '<span class="noPhoto"></span>'}
                     <span>
                       <strong>${escapeHtml(item.title)}</strong>
-                      <small>${escapeHtml(item.price || formatMoney(item.price_amount, item.currency))} · ${escapeHtml(item.position.label)} ${escapeHtml(formatDelta(item.position.delta_percent))}</small>
+                      <small><b class="priceArrow">${escapeHtml(priceArrow(item.position.status))}</b>${escapeHtml(item.price || formatMoney(item.price_amount, item.currency))} · ${escapeHtml(item.position.label)} ${escapeHtml(formatDelta(item.position.delta_percent))}</small>
                     </span>
                   </a>
                 `)
@@ -863,11 +937,34 @@ $('[name="random_interval_percent"]').addEventListener("input", (event) => {
 
 $("#searchForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  await api("/api/searches", { method: "POST", body: JSON.stringify(formData(event.target)) });
-  event.target.reset();
-  $('[name="interval_seconds"]').value = 180;
-  await loadState();
+  const form = event.target;
+  const help = $("#searchFormHelp");
+  help.textContent = "";
+  help.classList.remove("error");
+  try {
+    await api("/api/searches", { method: "POST", body: JSON.stringify(buildSearchPayload(form)) });
+    form.reset();
+    form.querySelector('[name="interval_seconds"]').value = 180;
+    form.querySelector('[name="search_mode"][value="manual"]').checked = true;
+    form.querySelector('[name="price_filter"][value="max"]').checked = true;
+    syncSearchMode();
+    syncSearchBuilderPriceState();
+    help.textContent = "Recherche ajoutee.";
+    await loadState();
+  } catch (error) {
+    help.textContent = error.message;
+    help.classList.add("error");
+  }
 });
+
+document.querySelectorAll('[name="price_filter"]').forEach((input) => {
+  input.addEventListener("change", syncSearchBuilderPriceState);
+});
+document.querySelectorAll('[name="search_mode"]').forEach((input) => {
+  input.addEventListener("change", syncSearchMode);
+});
+syncSearchMode();
+syncSearchBuilderPriceState();
 
 async function checkNow() {
   const buttons = document.querySelectorAll(".checkNowButton");
