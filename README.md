@@ -199,6 +199,8 @@ L'application garde en base les articles deja vus pour eviter les doublons.
 
 L'onglet `Recherches` regroupe toutes les veilles. Le bouton `Rechercher maintenant` lance uniquement la recherche choisie, meme si sa surveillance automatique est en pause. Le bouton global `Verifier maintenant` execute lui aussi toutes les recherches a la demande, sans modifier leur statut actif ou en pause.
 
+Apres un ajout, l'application ouvre directement l'onglet `Recherches`. Pendant une modification, le rafraichissement automatique est suspendu pour conserver le formulaire et son brouillon. L'URL Vinted est presentee sous forme de criteres lisibles ; son adresse complete reste consultable et modifiable dans le volet dedie.
+
 ## Gestion des utilisateurs
 
 Un administrateur peut creer des comptes, modifier leur nom et leur role, les activer ou les suspendre, reinitialiser leur mot de passe, fermer toutes leurs sessions et les supprimer. La page affiche aussi leur derniere connexion ainsi que le nombre de recherches et de sessions ouvertes.

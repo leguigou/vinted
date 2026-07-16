@@ -159,6 +159,79 @@ function escapeAttr(value) {
   return escapeHtml(value).replaceAll("'", "&#39;");
 }
 
+function describeSearchUrl(value) {
+  try {
+    const url = new URL(value);
+    const text = String(url.searchParams.get("search_text") || "").trim();
+    const priceMin = String(url.searchParams.get("price_from") || "").trim();
+    const priceMax = String(url.searchParams.get("price_to") || "").trim();
+    const details = [];
+    if (text) details.push(`Recherche : ${text}`);
+    if (priceMin && priceMax) details.push(`Prix : ${priceMin} a ${priceMax} EUR`);
+    else if (priceMin) details.push(`Prix min : ${priceMin} EUR`);
+    else if (priceMax) details.push(`Prix max : ${priceMax} EUR`);
+
+    const standardParams = new Set([
+      "search_text",
+      "price_from",
+      "price_to",
+      "order",
+      "currency",
+      "page",
+      "per_page",
+      "time",
+    ]);
+    const filters = new Set();
+    url.searchParams.forEach((_entry, key) => {
+      const normalized = key.replace(/\[\]$/, "");
+      if (!standardParams.has(normalized)) filters.add(normalized);
+    });
+    if (filters.size) details.push(`${filters.size} filtre${filters.size > 1 ? "s" : ""} Vinted`);
+    return details.join(" - ") || "Recherche Vinted personnalisee";
+  } catch {
+    return "URL Vinted personnalisee";
+  }
+}
+
+function captureSearchEditorDraft() {
+  const form = document.querySelector('#searches [data-edit-form]:not([hidden])');
+  if (!form) return null;
+  const activeElement = document.activeElement;
+  const focusedField = activeElement?.form === form ? activeElement.name : "";
+  return {
+    id: form.dataset.editForm,
+    values: formData(form),
+    urlEditorOpen: Boolean(form.querySelector("details")?.open),
+    focusedField,
+    selectionStart: focusedField ? activeElement.selectionStart : null,
+    selectionEnd: focusedField ? activeElement.selectionEnd : null,
+  };
+}
+
+function restoreSearchEditorDraft(container, draft) {
+  if (!draft) return;
+  const form = container.querySelector(`[data-edit-form="${draft.id}"]`);
+  if (!form) return;
+  Object.entries(draft.values).forEach(([name, value]) => {
+    const field = form.elements.namedItem(name);
+    if (field) field.value = value;
+  });
+  form.hidden = false;
+  const details = form.querySelector("details");
+  if (details) details.open = draft.urlEditorOpen;
+  const focusedField = draft.focusedField ? form.elements.namedItem(draft.focusedField) : null;
+  if (focusedField) {
+    focusedField.focus({ preventScroll: true });
+    if (draft.selectionStart !== null && typeof focusedField.setSelectionRange === "function") {
+      focusedField.setSelectionRange(draft.selectionStart, draft.selectionEnd);
+    }
+  }
+}
+
+function hasOpenEditor() {
+  return Boolean(document.querySelector(".editForm:not([hidden]), .userEditForm:not([hidden])"));
+}
+
 function parseLocalDate(value) {
   if (!value) return null;
   const normalized = String(value).trim().replace(" ", "T");
@@ -397,13 +470,25 @@ function renderDashboardSearches(container, searches, items) {
               <input name="name" value="${escapeAttr(search.name)}" required />
             </label>
             <label>
-              URL Vinted
-              <input name="url" value="${escapeAttr(search.url)}" required />
-            </label>
-            <label>
               Intervalle en secondes
               <input name="interval_seconds" type="number" min="60" value="${search.interval_seconds}" />
             </label>
+            <div class="editSearchUrl">
+              <div class="editSearchUrlSummary">
+                <div>
+                  <small>Criteres actuels</small>
+                  <strong>${escapeHtml(describeSearchUrl(search.url))}</strong>
+                </div>
+                <a class="searchExternalLink" href="${escapeAttr(search.url)}" target="_blank" rel="noreferrer">Ouvrir sur Vinted</a>
+              </div>
+              <details class="fullUrlEditor" ${MOBILE_MENU_QUERY.matches ? "open" : ""}>
+                <summary>Voir ou modifier l'URL complete</summary>
+                <label>
+                  URL Vinted complete
+                  <textarea name="url" rows="4" spellcheck="false" required>${escapeHtml(search.url)}</textarea>
+                </label>
+              </details>
+            </div>
             <div class="actions">
               <button type="submit">Sauvegarder</button>
               <button type="button" data-cancel-edit="${search.id}">Annuler</button>
@@ -417,6 +502,7 @@ function renderDashboardSearches(container, searches, items) {
 }
 
 function renderState(state, dashboardItems = { items: [] }) {
+  const searchEditorDraft = captureSearchEditorDraft();
   $("#currentUser").textContent = state.user.username;
   $("#userAvatar").textContent = state.user.username.slice(0, 1) || "?";
   $("#sideCurrentUser").textContent = state.user.username;
@@ -470,6 +556,7 @@ function renderState(state, dashboardItems = { items: [] }) {
   }
 
   renderDashboardSearches(searches, state.searches, dashboardItems.items || []);
+  restoreSearchEditorDraft(searches, searchEditorDraft);
 
   searches.querySelectorAll("[data-edit]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1138,13 +1225,16 @@ $("#searchForm").addEventListener("submit", async (event) => {
   help.textContent = "";
   help.classList.remove("error");
   try {
-    await api("/api/searches", { method: "POST", body: JSON.stringify(buildSearchPayload(form)) });
+    const payload = buildSearchPayload(form);
+    await api("/api/searches", { method: "POST", body: JSON.stringify(payload) });
     form.reset();
     form.querySelector('[name="interval_seconds"]').value = 180;
     form.querySelector('[name="search_mode"][value="manual"]').checked = true;
     syncSearchMode();
-    help.textContent = "Recherche ajoutee.";
+    switchView("searches");
     await loadState();
+    $("#status").textContent = `${payload.name} a ete ajoutee.`;
+    $("#status").classList.remove("error");
   } catch (error) {
     help.textContent = error.message;
     help.classList.add("error");
@@ -1233,7 +1323,7 @@ loadState().catch((error) => {
 });
 
 setInterval(() => {
-  if (!isAuthenticated) return;
+  if (!isAuthenticated || hasOpenEditor()) return;
   loadState().catch((error) => {
     $("#status").textContent = error.message;
   });
