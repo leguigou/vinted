@@ -1,5 +1,6 @@
 import gc
 import json
+import sqlite3
 import tempfile
 import threading
 import unittest
@@ -38,6 +39,10 @@ class AppTests(unittest.TestCase):
         with app.db() as conn:
             return int(conn.execute("select id from users where username = 'admin'").fetchone()[0])
 
+    def user_id(self, username: str) -> int:
+        with app.db() as conn:
+            return int(conn.execute("select id from users where username = ?", (username,)).fetchone()[0])
+
     def add_search(self, name: str) -> int:
         with app.db() as conn:
             cursor = conn.execute(
@@ -62,6 +67,33 @@ class AppTests(unittest.TestCase):
             )
             conn.execute("delete from searches where id = ?", (search_id,))
             self.assertEqual(conn.execute("select count(*) from seen_items").fetchone()[0], 0)
+
+    def test_existing_user_schema_is_migrated(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy.db"
+        with sqlite3.connect(legacy_path) as conn:
+            conn.execute(
+                """
+                create table users (
+                    id integer primary key autoincrement,
+                    username text not null unique,
+                    password_hash text not null,
+                    is_admin integer not null default 0,
+                    created_at text not null
+                )
+                """
+            )
+            conn.execute(
+                "insert into users(username, password_hash, is_admin, created_at) values('admin', ?, 1, ?)",
+                (app.hash_password("test-password"), app.now_iso()),
+            )
+        app.DB_PATH = legacy_path
+        app.init_db()
+        with app.db() as conn:
+            columns = set(app.table_columns(conn, "users"))
+            row = conn.execute("select is_active, last_login_at from users where username = 'admin'").fetchone()
+        self.assertIn("is_active", columns)
+        self.assertIn("last_login_at", columns)
+        self.assertEqual(row["is_active"], 1)
 
     def test_expired_session_is_deleted(self) -> None:
         token = app.create_session(self.admin_id())
@@ -130,6 +162,100 @@ class AppTests(unittest.TestCase):
         app.save_settings(user_id, {"clear_telegram_settings": True})
         self.assertEqual(app.get_setting(user_id, "telegram_bot_token"), "")
         self.assertEqual(app.get_setting(user_id, "telegram_chat_id"), "")
+
+    def test_user_profile_can_be_managed(self) -> None:
+        app.create_user({"username": "alice", "password": "secret12"})
+        alice_id = self.user_id("alice")
+        app.update_user_profile(
+            self.admin_id(),
+            alice_id,
+            {"username": "alice-renamed", "is_admin": True, "is_active": True},
+        )
+        managed = next(user for user in app.list_users() if user["id"] == alice_id)
+        self.assertEqual(managed["username"], "alice-renamed")
+        self.assertTrue(managed["is_admin"])
+        self.assertTrue(managed["is_active"])
+        self.assertEqual(managed["search_count"], 0)
+        self.assertEqual(managed["session_count"], 0)
+        with self.assertRaisesRegex(RuntimeError, "existe déjà"):
+            app.create_user({"username": "ALICE-RENAMED", "password": "secret12"})
+
+    def test_deactivating_user_revokes_sessions_and_pauses_checks(self) -> None:
+        app.create_user({"username": "bob", "password": "secret12"})
+        bob_id = self.user_id("bob")
+        self.assertIsNotNone(app.authenticate("bob", "secret12"))
+        token = app.create_session(bob_id)
+        with app.db() as conn:
+            conn.execute(
+                """
+                insert into searches(user_id, name, url, enabled, interval_seconds, created_at)
+                values(?, 'bob search', 'https://www.vinted.fr/catalog?search_text=test', 1, 180, ?)
+                """,
+                (bob_id, app.now_iso()),
+            )
+        app.update_user_profile(
+            self.admin_id(),
+            bob_id,
+            {"username": "bob", "is_active": False, "is_admin": False},
+        )
+        self.assertIsNone(app.get_session_user(token))
+        self.assertIsNone(app.authenticate("bob", "secret12"))
+        self.assertFalse(any(search["user_id"] == bob_id for search in app.list_searches()))
+
+    def test_admin_can_revoke_sessions_and_reset_password(self) -> None:
+        app.create_user({"username": "carol", "password": "secret12"})
+        carol_id = self.user_id("carol")
+        first_token = app.create_session(carol_id)
+        app.revoke_user_sessions(self.admin_id(), carol_id)
+        self.assertIsNone(app.get_session_user(first_token))
+        second_token = app.create_session(carol_id)
+        app.update_user_password(self.admin_id(), carol_id, {"password": "new-secret"})
+        self.assertIsNone(app.get_session_user(second_token))
+        self.assertIsNotNone(app.authenticate("carol", "new-secret"))
+
+    def test_user_delete_cleans_related_data(self) -> None:
+        app.create_user({"username": "david", "password": "secret12"})
+        david_id = self.user_id("david")
+        app.set_setting(david_id, "telegram_chat_id", "123")
+        app.create_session(david_id)
+        with app.db() as conn:
+            cursor = conn.execute(
+                """
+                insert into searches(user_id, name, url, enabled, interval_seconds, created_at)
+                values(?, 'david search', 'https://www.vinted.fr/catalog?search_text=test', 1, 180, ?)
+                """,
+                (david_id, app.now_iso()),
+            )
+            search_id = int(cursor.lastrowid)
+            conn.execute(
+                """
+                insert into seen_items(item_id, search_id, title, url, created_at)
+                values('david-item', ?, 'Article', 'https://www.vinted.fr/items/2', ?)
+                """,
+                (search_id, app.now_iso()),
+            )
+        app.delete_user(self.admin_id(), david_id)
+        with app.db() as conn:
+            self.assertEqual(conn.execute("select count(*) from users where id = ?", (david_id,)).fetchone()[0], 0)
+            self.assertEqual(conn.execute("select count(*) from searches where user_id = ?", (david_id,)).fetchone()[0], 0)
+            self.assertEqual(conn.execute("select count(*) from seen_items where search_id = ?", (search_id,)).fetchone()[0], 0)
+            self.assertEqual(conn.execute("select count(*) from settings where user_id = ?", (david_id,)).fetchone()[0], 0)
+
+    def test_last_admin_and_current_account_are_protected(self) -> None:
+        admin_id = self.admin_id()
+        with mock.patch.object(app, "ADMIN_USERNAME", "different-system-admin"):
+            with self.assertRaisesRegex(RuntimeError, "dernier administrateur"):
+                app.update_user_profile(
+                    999,
+                    admin_id,
+                    {"username": "admin", "is_admin": False, "is_active": True},
+                )
+        with self.assertRaisesRegex(RuntimeError, "administrateur système"):
+            app.delete_user(999, admin_id)
+        with self.assertRaisesRegex(RuntimeError, "propre compte"):
+            app.delete_user(admin_id, admin_id)
+        with self.assertRaisesRegex(RuntimeError, "Mon compte"):
+            app.update_user_password(admin_id, admin_id, {"password": "new-secret"})
 
     def test_public_host_rejects_default_password(self) -> None:
         with mock.patch.object(app, "HOST", "0.0.0.0"):

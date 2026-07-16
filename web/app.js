@@ -25,6 +25,7 @@ const VIEW_DESCRIPTIONS = {
 let itemsPage = 1;
 let isAuthenticated = false;
 let activeView = "searches";
+let latestState = null;
 
 function applyTheme(theme) {
   const activeTheme = theme === "dark" ? "dark" : "light";
@@ -80,6 +81,13 @@ function cleanServerError(text, status) {
 
 function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
+}
+
+function normalizeFilterText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 function buildSearchPayload(form) {
@@ -274,6 +282,7 @@ function showAccountPasswordForm() {
 
 async function loadState() {
   const state = await api("/api/state");
+  latestState = state;
   showApp();
   let dashboardItems = { items: [] };
   try {
@@ -515,18 +524,85 @@ function renderUsers(state) {
     return;
   }
 
-  $("#usersSummary").textContent = `${state.users.length} utilisateur(s)`;
-  users.innerHTML = state.users
+  const activeCount = state.users.filter((user) => user.is_active).length;
+  const adminCount = state.users.filter((user) => user.is_admin && user.is_active).length;
+  $("#usersSummary").textContent = `${activeCount} compte${activeCount > 1 ? "s" : ""} actif${activeCount > 1 ? "s" : ""} · ${adminCount} administrateur${adminCount > 1 ? "s" : ""}`;
+
+  const filter = normalizeFilterText($("#userFilter").value.trim());
+  const filteredUsers = state.users.filter((user) => {
+    const labels = [
+      user.username,
+      user.is_admin ? "administrateur admin" : "utilisateur",
+      user.is_active ? "actif" : "desactive suspendu",
+    ].join(" ");
+    return !filter || normalizeFilterText(labels).includes(filter);
+  });
+
+  if (!filteredUsers.length) {
+    users.innerHTML = `
+      <div class="emptyState userEmptyState">
+        <span class="emptyStateIcon iconGlyph iconUsers" aria-hidden="true"></span>
+        <h3>Aucun utilisateur trouve</h3>
+        <p>Modifie le filtre ou cree un nouveau compte.</p>
+      </div>
+    `;
+    return;
+  }
+
+  users.innerHTML = filteredUsers
     .map((user) => `
-      <div class="row compactRow">
-        <div>
-          <strong>${escapeHtml(user.username)}</strong>
-          <small>${user.is_admin ? "Admin" : "Utilisateur"} · créé le ${escapeHtml(user.created_at)}</small>
+      <article class="userCard ${user.is_active ? "" : "isDisabled"}">
+        <header class="userCardHeader">
+          <div class="userIdentity">
+            <span class="userAvatar">${escapeHtml(user.username.slice(0, 1) || "?")}</span>
+            <div>
+              <strong>${escapeHtml(user.username)}</strong>
+              <span class="userBadges">
+                <span class="statusPill ${user.is_admin ? "admin" : "neutral"}">${user.is_admin ? "Administrateur" : "Utilisateur"}</span>
+                <span class="statusPill ${user.is_active ? "success" : "error"}">${user.is_active ? "Actif" : "Desactive"}</span>
+                ${user.is_system_admin ? '<span class="statusPill system">Compte systeme</span>' : ""}
+                ${user.id === state.user.id ? '<span class="statusPill current">Compte actuel</span>' : ""}
+              </span>
+            </div>
+          </div>
+          ${user.is_system_admin ? "" : `<button class="linkButton" type="button" data-user-edit-toggle="${user.id}">Modifier</button>`}
+        </header>
+        <div class="userMetrics">
+          <span><small>Recherches</small><strong>${user.search_count}</strong></span>
+          <span><small>Sessions</small><strong>${user.session_count}</strong></span>
+          <span><small>Derniere connexion</small><strong>${user.last_login_at ? escapeHtml(relativeTime(user.last_login_at)) : "Jamais"}</strong></span>
         </div>
-        <button class="linkButton" type="button" data-password-toggle="${user.id}">
-          <span class="lockIcon" aria-hidden="true"></span>
-          Modifier le mot de passe
-        </button>
+        <small class="userCreatedAt">Compte cree ${escapeHtml(relativeTime(user.created_at))}</small>
+        <div class="userCardActions">
+          ${user.id === state.user.id ? `
+            <span class="muted">Gere ton mot de passe depuis Mon compte.</span>
+          ` : `
+            <button type="button" data-password-toggle="${user.id}">Mot de passe</button>
+            <button type="button" data-user-sessions="${user.id}" ${user.session_count ? "" : "disabled"}>Deconnecter</button>
+            ${user.is_system_admin ? "" : `<button type="button" class="danger" data-user-delete="${user.id}">Supprimer</button>`}
+          `}
+        </div>
+        <small class="userActionMessage" data-user-action-message="${user.id}"></small>
+        <form class="userEditForm" data-user-edit-form="${user.id}" hidden>
+          <label>
+            Nom d'utilisateur
+            <input name="username" value="${escapeAttr(user.username)}" minlength="3" maxlength="50" required />
+          </label>
+          <label class="checkboxLabel">
+            <input name="is_admin" type="checkbox" ${user.is_admin ? "checked" : ""} ${user.id === state.user.id ? "disabled" : ""} />
+            Administrateur
+          </label>
+          <label class="checkboxLabel">
+            <input name="is_active" type="checkbox" ${user.is_active ? "checked" : ""} ${user.id === state.user.id ? "disabled" : ""} />
+            Compte actif
+          </label>
+          ${user.id === state.user.id ? '<input name="is_admin" type="hidden" value="on" /><input name="is_active" type="hidden" value="on" />' : ""}
+          <div class="actions">
+            <button type="submit">Enregistrer</button>
+            <button type="button" data-user-edit-cancel="${user.id}">Annuler</button>
+          </div>
+          <small data-user-edit-error="${user.id}"></small>
+        </form>
         <form class="passwordForm" data-password-form="${user.id}" hidden>
           <label>
             Nouveau mot de passe
@@ -536,9 +612,40 @@ function renderUsers(state) {
           <button type="button" data-password-cancel="${user.id}">Annuler</button>
           <small data-password-error="${user.id}"></small>
         </form>
-      </div>
+      </article>
     `)
     .join("");
+
+  users.querySelectorAll("[data-user-edit-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = users.querySelector(`[data-user-edit-form="${button.dataset.userEditToggle}"]`);
+      form.hidden = !form.hidden;
+    });
+  });
+
+  users.querySelectorAll("[data-user-edit-cancel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      users.querySelector(`[data-user-edit-form="${button.dataset.userEditCancel}"]`).hidden = true;
+    });
+  });
+
+  users.querySelectorAll("[data-user-edit-form]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const id = form.dataset.userEditForm;
+      const error = users.querySelector(`[data-user-edit-error="${id}"]`);
+      error.textContent = "";
+      try {
+        await api(`/api/users/${id}/save`, {
+          method: "POST",
+          body: JSON.stringify(formData(form)),
+        });
+        await loadState();
+      } catch (exception) {
+        error.textContent = exception.message;
+      }
+    });
+  });
 
   users.querySelectorAll("[data-password-toggle]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -582,6 +689,35 @@ function renderUsers(state) {
       } catch (exception) {
         error.textContent = exception.message;
         error.classList.add("error");
+      }
+    });
+  });
+
+  users.querySelectorAll("[data-user-sessions]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const user = state.users.find((candidate) => String(candidate.id) === button.dataset.userSessions);
+      if (!window.confirm(`Deconnecter ${user?.username || "cet utilisateur"} de tous ses appareils ?`)) return;
+      const message = users.querySelector(`[data-user-action-message="${button.dataset.userSessions}"]`);
+      try {
+        await api(`/api/users/${button.dataset.userSessions}/sessions`, { method: "POST", body: "{}" });
+        await loadState();
+      } catch (error) {
+        message.textContent = error.message;
+      }
+    });
+  });
+
+  users.querySelectorAll("[data-user-delete]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const user = state.users.find((candidate) => String(candidate.id) === button.dataset.userDelete);
+      const message = `Supprimer definitivement ${user?.username || "cet utilisateur"} et ses recherches ?`;
+      if (!window.confirm(message)) return;
+      const feedback = users.querySelector(`[data-user-action-message="${button.dataset.userDelete}"]`);
+      try {
+        await api(`/api/users/${button.dataset.userDelete}/delete`, { method: "POST", body: "{}" });
+        await loadState();
+      } catch (error) {
+        feedback.textContent = error.message;
       }
     });
   });
@@ -868,6 +1004,9 @@ function setUserFormOpen(open) {
 
 $("#userFormToggle").addEventListener("click", () => setUserFormOpen(true));
 $("#userFormCancel").addEventListener("click", () => setUserFormOpen(false));
+$("#userFilter").addEventListener("input", () => {
+  if (latestState) renderUsers(latestState);
+});
 
 $("#userForm").addEventListener("submit", async (event) => {
   event.preventDefault();

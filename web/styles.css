@@ -699,8 +699,12 @@ button.danger {
 }
 
 button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.7;
+}
+
+.checkNowButton:disabled {
+  cursor: wait;
 }
 
 .themeToggle {
@@ -994,6 +998,173 @@ body[data-theme="dark"] .themeIcon::after {
 .userForm small {
   grid-column: 1 / -1;
   color: var(--danger);
+}
+
+.userAdminToolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 16px;
+}
+
+.userAdminToolbar label {
+  width: min(360px, 100%);
+}
+
+.userGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.userCard {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 16px;
+  box-shadow: var(--shadow-soft);
+}
+
+.userCard.isDisabled {
+  background: var(--surface-soft);
+  opacity: 0.86;
+}
+
+.userCardHeader,
+.userIdentity,
+.userBadges,
+.userCardActions {
+  display: flex;
+  align-items: center;
+}
+
+.userCardHeader {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.userIdentity {
+  min-width: 0;
+  gap: 11px;
+}
+
+.userIdentity > div {
+  min-width: 0;
+}
+
+.userIdentity > div > strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userBadges {
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.statusPill.admin {
+  background: var(--accent-soft);
+  color: var(--primary-dark);
+}
+
+.statusPill.current {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.statusPill.system {
+  background: var(--accent-soft);
+  color: var(--primary-dark);
+}
+
+.userMetrics {
+  display: grid;
+  grid-template-columns: 0.8fr 0.8fr 1.4fr;
+  gap: 8px;
+}
+
+.userMetrics > span {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  padding: 9px;
+}
+
+.userMetrics small,
+.userMetrics strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userMetrics small {
+  font-size: 10px;
+}
+
+.userMetrics strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.userCreatedAt {
+  margin-top: -6px;
+  font-size: 11px;
+}
+
+.userCardActions {
+  flex-wrap: wrap;
+  gap: 7px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.userCardActions .muted {
+  line-height: 1.4;
+}
+
+.userActionMessage {
+  min-height: 16px;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.userEditForm {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+  border-top: 1px solid var(--line);
+  padding-top: 13px;
+}
+
+.userEditForm[hidden] {
+  display: none;
+}
+
+.userEditForm .actions,
+.userEditForm > small {
+  grid-column: 1 / -1;
+}
+
+.userEditForm > small {
+  color: var(--danger);
+}
+
+.userEmptyState {
+  grid-column: 1 / -1;
 }
 
 .passwordForm {
@@ -1785,6 +1956,10 @@ body[data-theme="dark"] .themeIcon::after {
     background: var(--bg);
   }
 
+  body[data-theme="dark"] {
+    --active-nav-ink: var(--on-accent);
+  }
+
   body.menuCollapsed .appLayout,
   .appLayout {
     display: block;
@@ -2070,6 +2245,7 @@ body[data-theme="dark"] .themeIcon::after {
 
   .bottomNavItem.active .bottomIconPill {
     background: var(--accent);
+    color: var(--on-accent);
   }
 
   #accountPanel {
@@ -2161,9 +2337,18 @@ body[data-theme="dark"] .themeIcon::after {
   .priceRangeGrid,
   .row,
   .userForm,
+  .userEditForm,
   .editForm,
   .passwordForm {
     grid-template-columns: 1fr;
+  }
+
+  .userGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .userCardHeader {
+    align-items: flex-start;
   }
 
   .sectionTitle {

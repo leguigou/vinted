@@ -12,7 +12,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="stylesheet" href="/styles.css?v=1.0.40" />
+    <link rel="stylesheet" href="/styles.css?v=1.0.42" />
   </head>
   <body>
     <main id="loginShell" class="shell authShell">
@@ -39,7 +39,7 @@
             <div id="loginError" class="help error"></div>
           </form>
         </section>
-        <small class="appVersion">Version 1.0.40</small>
+        <small class="appVersion">Version 1.0.42</small>
       </div>
     </main>
 
@@ -200,22 +200,28 @@
           </div>
           <form id="userForm" class="userForm" hidden>
             <label>
-              Utilisateur
-              <input name="username" required />
+              Nom d'utilisateur
+              <input name="username" minlength="3" maxlength="50" autocomplete="off" required />
             </label>
             <label>
-              Mot de passe
-              <input name="password" type="password" required />
+              Mot de passe initial
+              <input name="password" type="password" minlength="6" autocomplete="new-password" required />
             </label>
             <label class="checkboxLabel">
               <input name="is_admin" type="checkbox" />
-              Admin
+              Administrateur
             </label>
             <button type="submit">Creer</button>
             <button id="userFormCancel" type="button">Annuler</button>
             <small id="userError"></small>
           </form>
-          <div id="users" class="list compactList"></div>
+          <div class="userAdminToolbar">
+            <label>
+              Rechercher un utilisateur
+              <input id="userFilter" type="search" placeholder="Nom, role ou statut..." autocomplete="off" />
+            </label>
+          </div>
+          <div id="users" class="userGrid"></div>
         </section>
 
         <section class="panel viewPanel" data-panel="telegram">
@@ -387,6 +393,6 @@
       </nav>
     </main>
 
-    <script src="/app.js?v=1.0.40"></script>
+    <script src="/app.js?v=1.0.42"></script>
   </body>
 </html>

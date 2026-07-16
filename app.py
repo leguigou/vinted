@@ -150,10 +150,11 @@ def get_session_user(token: str) -> dict | None:
     with db() as conn:
         row = conn.execute(
             """
-            select u.id, u.username, u.is_admin, s.created_at as session_created_at
+            select u.id, u.username, u.is_admin, u.is_active,
+                   s.created_at as session_created_at
             from sessions s
             join users u on u.id = s.user_id
-            where s.token = ?
+            where s.token = ? and u.is_active = 1
             """,
             (token,),
         ).fetchone()
@@ -191,6 +192,8 @@ def init_db() -> None:
                 username text not null unique,
                 password_hash text not null,
                 is_admin integer not null default 0,
+                is_active integer not null default 1,
+                last_login_at text,
                 created_at text not null
             );
 
@@ -250,6 +253,8 @@ def ensure_admin_user(conn: sqlite3.Connection) -> int:
                 "update users set password_hash = ?, is_admin = 1 where id = ?",
                 (hash_password(ADMIN_PASSWORD_ENV), int(row["id"])),
             )
+        else:
+            conn.execute("update users set is_admin = 1 where id = ?", (int(row["id"]),))
         return int(row["id"])
     cursor = conn.execute(
         """
@@ -267,6 +272,13 @@ def table_columns(conn: sqlite3.Connection, table: str) -> list[str]:
 
 def migrate_multi_user_schema(conn: sqlite3.Connection) -> None:
     admin_id = ensure_admin_user(conn)
+
+    users_columns = table_columns(conn, "users")
+    if "is_active" not in users_columns:
+        conn.execute("alter table users add column is_active integer not null default 1")
+    if "last_login_at" not in users_columns:
+        conn.execute("alter table users add column last_login_at text")
+    conn.execute("update users set is_active = 1 where id = ?", (admin_id,))
 
     settings_columns = table_columns(conn, "settings")
     if "user_id" not in settings_columns:
@@ -407,9 +419,9 @@ def get_random_interval_percent(user_id: int) -> int:
 def list_searches(user_id: int | None = None) -> list[dict]:
     with db() as conn:
         params: tuple = ()
-        where = ""
+        where = "where exists(select 1 from users u where u.id = searches.user_id and u.is_active = 1)"
         if user_id is not None:
-            where = "where user_id = ?"
+            where += " and user_id = ?"
             params = (user_id,)
         rows = conn.execute(
             f"""
@@ -872,7 +884,9 @@ def run_checks_once(
                     user_filter = "and user_id = ?"
                     params = (user_id,)
                 rows = conn.execute(
-                    f"select * from searches where enabled = 1 {user_filter} order by id asc",
+                    "select * from searches where enabled = 1 "
+                    "and exists(select 1 from users u where u.id = searches.user_id and u.is_active = 1) "
+                    f"{user_filter} order by id asc",
                     params,
                 ).fetchall()
 
@@ -1100,7 +1114,7 @@ class Handler(BaseHTTPRequestHandler):
                 user = self.require_user()
                 if not user["is_admin"]:
                     raise AuthorizationError("Accès admin requis.")
-                self.update_user(parsed.path, payload)
+                self.update_user(user, parsed.path, payload)
             elif parsed.path.startswith("/api/searches/"):
                 user = self.require_user()
                 self.update_search(user, parsed.path, payload)
@@ -1243,12 +1257,21 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
 
-    def update_user(self, path: str, payload: dict) -> None:
+    def update_user(self, actor: dict, path: str, payload: dict) -> None:
         parts = path.strip("/").split("/")
         user_id = int(parts[2])
         action = parts[3] if len(parts) > 3 else ""
         if action == "password":
-            update_user_password(user_id, payload)
+            update_user_password(int(actor["id"]), user_id, payload)
+            self.send_json({"ok": True})
+        elif action == "save":
+            update_user_profile(int(actor["id"]), user_id, payload)
+            self.send_json({"ok": True})
+        elif action == "sessions":
+            revoke_user_sessions(int(actor["id"]), user_id)
+            self.send_json({"ok": True})
+        elif action == "delete":
+            delete_user(int(actor["id"]), user_id)
             self.send_json({"ok": True})
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -1268,6 +1291,7 @@ def api_state(user: dict) -> dict:
             "id": user["id"],
             "username": user["username"],
             "is_admin": bool(user["is_admin"]),
+            "is_active": bool(user["is_active"]),
         },
         "settings": {
             "telegram_bot_token": mask_secret(get_setting(user["id"], "telegram_bot_token")),
@@ -1299,9 +1323,11 @@ def list_users() -> list[dict]:
     with db() as conn:
         rows = conn.execute(
             """
-            select id, username, is_admin, created_at
-            from users
-            order by username asc
+            select u.id, u.username, u.is_admin, u.is_active, u.created_at, u.last_login_at,
+                   (select count(*) from searches s where s.user_id = u.id) as search_count,
+                   (select count(*) from sessions x where x.user_id = u.id) as session_count
+            from users u
+            order by u.is_active desc, u.username collate nocase asc
             """
         ).fetchall()
     return [
@@ -1309,34 +1335,123 @@ def list_users() -> list[dict]:
             "id": row["id"],
             "username": row["username"],
             "is_admin": bool(row["is_admin"]),
+            "is_active": bool(row["is_active"]),
             "created_at": row["created_at"],
+            "last_login_at": row["last_login_at"],
+            "search_count": int(row["search_count"]),
+            "session_count": int(row["session_count"]),
+            "is_system_admin": row["username"] == ADMIN_USERNAME,
         }
         for row in rows
     ]
 
 
 def create_user(payload: dict) -> None:
-    username = str(payload.get("username", "")).strip()
+    username = validate_username(payload.get("username"))
     password = str(payload.get("password", "")).strip()
-    is_admin = 1 if payload.get("is_admin") else 0
-    if not username:
-        raise RuntimeError("Nom d'utilisateur obligatoire.")
+    is_admin = 1 if payload_flag(payload.get("is_admin")) else 0
     if len(password) < 6:
         raise RuntimeError("Mot de passe: 6 caractères minimum.")
     with db() as conn:
+        if conn.execute(
+            "select 1 from users where username = ? collate nocase",
+            (username,),
+        ).fetchone():
+            raise RuntimeError("Cet utilisateur existe déjà.")
         try:
             conn.execute(
                 """
-                insert into users(username, password_hash, is_admin, created_at)
-                values(?, ?, ?, ?)
+                insert into users(username, password_hash, is_admin, is_active, created_at)
+                values(?, ?, ?, 1, ?)
                 """,
                 (username, hash_password(password), is_admin, now_iso()),
             )
         except sqlite3.IntegrityError as exc:
             raise RuntimeError("Cet utilisateur existe déjà.") from exc
 
- 
-def update_user_password(user_id: int, payload: dict) -> None:
+
+def payload_flag(value: object) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def validate_username(value: object) -> str:
+    username = str(value or "").strip()
+    if len(username) < 3:
+        raise RuntimeError("Nom d'utilisateur: 3 caractères minimum.")
+    if len(username) > 50:
+        raise RuntimeError("Nom d'utilisateur: 50 caractères maximum.")
+    if any(character.isspace() for character in username):
+        raise RuntimeError("Le nom d'utilisateur ne doit pas contenir d'espace.")
+    return username
+
+
+def active_admin_count(conn: sqlite3.Connection) -> int:
+    return int(
+        conn.execute(
+            "select count(*) from users where is_admin = 1 and is_active = 1"
+        ).fetchone()[0]
+    )
+
+
+def get_managed_user(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row:
+    row = conn.execute(
+        "select id, username, is_admin, is_active from users where id = ?",
+        (user_id,),
+    ).fetchone()
+    if not row:
+        raise RuntimeError("Utilisateur introuvable.")
+    return row
+
+
+def update_user_profile(actor_id: int, user_id: int, payload: dict) -> None:
+    username = validate_username(payload.get("username"))
+    is_admin = 1 if payload_flag(payload.get("is_admin")) else 0
+    is_active = 1 if payload_flag(payload.get("is_active")) else 0
+    with db() as conn:
+        user = get_managed_user(conn, user_id)
+        if user["username"] == ADMIN_USERNAME and (
+            username != ADMIN_USERNAME or not is_admin or not is_active
+        ):
+            raise RuntimeError("Le compte administrateur système ne peut pas être renommé ou désactivé.")
+        search_ids = {
+            int(row["id"])
+            for row in conn.execute("select id from searches where user_id = ?", (user_id,)).fetchall()
+        }
+        if user_id == actor_id and (not is_admin or not is_active):
+            raise RuntimeError("Tu ne peux pas retirer ton propre accès administrateur.")
+        removes_active_admin = bool(user["is_admin"] and user["is_active"]) and not (
+            is_admin and is_active
+        )
+        if removes_active_admin and active_admin_count(conn) <= 1:
+            raise RuntimeError("Impossible de désactiver ou rétrograder le dernier administrateur.")
+        if conn.execute(
+            "select 1 from users where username = ? collate nocase and id <> ?",
+            (username, user_id),
+        ).fetchone():
+            raise RuntimeError("Cet utilisateur existe déjà.")
+        try:
+            conn.execute(
+                "update users set username = ?, is_admin = ?, is_active = ? where id = ?",
+                (username, is_admin, is_active, user_id),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise RuntimeError("Cet utilisateur existe déjà.") from exc
+        if not is_active:
+            conn.execute("delete from sessions where user_id = ?", (user_id,))
+    with state_lock:
+        for search_id in search_ids:
+            if is_active:
+                next_check_at[search_id] = 0
+            else:
+                next_check_at.pop(search_id, None)
+    worker_wakeup.set()
+
+
+def update_user_password(actor_id: int, user_id: int, payload: dict) -> None:
+    if user_id == actor_id:
+        raise RuntimeError("Modifie ton mot de passe depuis la page Mon compte.")
     password = str(payload.get("password", "")).strip()
     if len(password) < 6:
         raise RuntimeError("Mot de passe: 6 caractères minimum.")
@@ -1348,6 +1463,39 @@ def update_user_password(user_id: int, payload: dict) -> None:
         if cursor.rowcount == 0:
             raise RuntimeError("Utilisateur introuvable.")
         conn.execute("delete from sessions where user_id = ?", (user_id,))
+
+
+def revoke_user_sessions(actor_id: int, user_id: int) -> None:
+    if user_id == actor_id:
+        raise RuntimeError("Utilise le bouton Déconnexion pour fermer ta session actuelle.")
+    with db() as conn:
+        get_managed_user(conn, user_id)
+        conn.execute("delete from sessions where user_id = ?", (user_id,))
+
+
+def delete_user(actor_id: int, user_id: int) -> None:
+    if user_id == actor_id:
+        raise RuntimeError("Tu ne peux pas supprimer ton propre compte.")
+    with db() as conn:
+        user = get_managed_user(conn, user_id)
+        if user["username"] == ADMIN_USERNAME:
+            raise RuntimeError("Le compte administrateur système ne peut pas être supprimé.")
+        if user["is_admin"] and user["is_active"] and active_admin_count(conn) <= 1:
+            raise RuntimeError("Impossible de supprimer le dernier administrateur.")
+        search_rows = conn.execute(
+            "select id from searches where user_id = ?",
+            (user_id,),
+        ).fetchall()
+        search_ids = {int(row["id"]) for row in search_rows}
+        conn.execute("delete from searches where user_id = ?", (user_id,))
+        conn.execute("delete from settings where user_id = ?", (user_id,))
+        conn.execute("delete from sessions where user_id = ?", (user_id,))
+        conn.execute("delete from users where id = ?", (user_id,))
+    with state_lock:
+        initialized_search_ids.difference_update(search_ids)
+        for search_id in search_ids:
+            next_check_at.pop(search_id, None)
+    worker_wakeup.set()
 
 
 def update_account_password(user_id: int, session_token: str, payload: dict) -> None:
@@ -1370,12 +1518,18 @@ def update_account_password(user_id: int, session_token: str, payload: dict) -> 
 def authenticate(username: str, password: str) -> dict | None:
     with db() as conn:
         row = conn.execute(
-            "select id, username, password_hash, is_admin from users where username = ?",
+            "select id, username, password_hash, is_admin, is_active from users where username = ?",
             (username,),
         ).fetchone()
-    if not row or not verify_password(password, row["password_hash"]):
-        return None
-    return {"id": row["id"], "username": row["username"], "is_admin": row["is_admin"]}
+        if not row or not row["is_active"] or not verify_password(password, row["password_hash"]):
+            return None
+        conn.execute("update users set last_login_at = ? where id = ?", (now_iso(), row["id"]))
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "is_admin": row["is_admin"],
+        "is_active": row["is_active"],
+    }
 
 
 def save_settings(user_id: int, payload: dict) -> None:

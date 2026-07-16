@@ -197,6 +197,16 @@ Puis renvoie un message au bot et reclique sur `Trouver mon Chat ID`.
 
 L'application garde en base les articles deja vus pour eviter les doublons.
 
+## Gestion des utilisateurs
+
+Un administrateur peut creer des comptes, modifier leur nom et leur role, les activer ou les suspendre, reinitialiser leur mot de passe, fermer toutes leurs sessions et les supprimer. La page affiche aussi leur derniere connexion ainsi que le nombre de recherches et de sessions ouvertes.
+
+- Suspendre un compte ferme ses sessions et met sa surveillance en pause sans supprimer ses recherches.
+- Reactiver le compte reprend automatiquement sa surveillance.
+- Modifier un mot de passe depuis l'administration ferme toutes les sessions du compte cible.
+- Le compte actuellement connecte et le dernier administrateur actif sont proteges contre une suppression, une suspension ou une retrogradation accidentelle.
+- Le compte administrateur systeme defini par `VINTED_ALERTS_ADMIN_USERNAME` reste actif et ne peut pas etre renomme ou supprime depuis l'interface.
+
 ## Notes
 
 - La base SQLite locale est creee dans `vinted_alerts.db`.
