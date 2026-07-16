@@ -3,3 +3,4 @@ __pycache__/
 vinted_alerts.db
 *.log
 fetch-api.env
+.env

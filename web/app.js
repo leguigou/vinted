@@ -8,9 +8,19 @@ const VIEW_TITLES = {
   telegram: "Telegram",
   settings: "Parametres",
   "new-search": "Nouvelle recherche",
-  searches: "Recherches actives",
+  searches: "Tableau de bord",
   items: "Historique alertes",
   prices: "Analyse prix",
+};
+const VIEW_DESCRIPTIONS = {
+  account: "Tes informations personnelles et la securite de ton compte.",
+  users: "Gere les acces et les roles de ton espace.",
+  telegram: "Configure le bot qui recevra les nouvelles annonces.",
+  settings: "Ajuste le rythme et le comportement de la surveillance.",
+  "new-search": "Cree une veille a partir d'une URL ou d'une recherche rapide.",
+  searches: "L'essentiel de tes recherches, alertes et opportunites.",
+  items: "Retrouve les annonces detectees par ordre chronologique.",
+  prices: "Compare les prix et repere les annonces sous la mediane.",
 };
 let itemsPage = 1;
 let isAuthenticated = false;
@@ -33,11 +43,7 @@ function applyTheme(theme) {
 }
 
 async function api(path, options = {}) {
-  const token = localStorage.getItem("vinted_session_token");
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
   const response = await fetch(path, {
     ...options,
     headers,
@@ -248,6 +254,7 @@ function switchView(view) {
     button.classList.toggle("active", button.dataset.view === view);
   });
   $("#viewTitle").textContent = VIEW_TITLES[view] || "Vinted Alerts";
+  $("#viewDescription").textContent = VIEW_DESCRIPTIONS[view] || "Surveillance de recherches Vinted.";
 
   if (MOBILE_MENU_QUERY.matches) {
     setMenuExpanded(false);
@@ -325,9 +332,8 @@ function renderDashboardSearches(container, searches, items) {
     .map((search) => {
       const latestItems = itemsBySearch.get(String(search.id)) || [];
       const meta = [
-        `toutes les ${search.interval_seconds}s`,
-        search.last_checked_at ? `dernier check ${escapeHtml(search.last_checked_at)}` : "",
-        search.last_error ? `erreur ${escapeHtml(search.last_error)}` : "",
+        `Toutes les ${search.interval_seconds}s`,
+        search.last_checked_at ? `verifiee ${escapeHtml(relativeTime(search.last_checked_at))}` : "jamais verifiee",
       ].filter(Boolean).join(" - ");
       const slider = latestItems.length
         ? latestItems.map((item) => `
@@ -345,15 +351,21 @@ function renderDashboardSearches(container, searches, items) {
           `).join("")
         : '<p class="empty sliderEmpty">Aucun article detecte pour cette recherche.</p>';
       return `
-        <article class="dashboardSearch ${search.enabled ? "isActive" : "isPaused"}">
+        <article class="dashboardSearch ${search.enabled ? "isActive" : "isPaused"} ${search.last_error ? "hasError" : ""}">
           <div class="dashboardSearchHeader">
             <div class="dashboardSearchTitle">
-              <strong>${escapeHtml(search.name)}</strong>
+              <div class="dashboardSearchTitleLine">
+                <strong>${escapeHtml(search.name)}</strong>
+                <span class="statusPill ${search.last_error ? "error" : search.enabled ? "success" : "neutral"}">
+                  ${search.last_error ? "Erreur" : search.enabled ? "Active" : "En pause"}
+                </span>
+              </div>
               <small>${meta}</small>
+              ${search.last_error ? `<small class="searchError">${escapeHtml(search.last_error)}</small>` : ""}
             </div>
             <button class="searchSwitch" type="button" role="switch" aria-checked="${search.enabled ? "true" : "false"}" data-toggle="${search.id}">
               <span class="switchTrack"><span class="switchThumb"></span></span>
-              <span class="switchLabel">${search.enabled ? "Active" : "Pause"}</span>
+              <span class="switchLabel">${search.enabled ? "Suspendre" : "Activer"}</span>
             </button>
           </div>
           <div class="dashboardSearchUrl">${escapeHtml(search.url)}</div>
@@ -394,6 +406,7 @@ function renderState(state, dashboardItems = { items: [] }) {
   $("#userAvatar").textContent = state.user.username.slice(0, 1) || "?";
   $("#sideCurrentUser").textContent = state.user.username;
   $("#sideUserAvatar").textContent = state.user.username.slice(0, 1) || "?";
+  $("#sideUserRole").textContent = state.user.is_admin ? "Administrateur" : "Compte utilisateur";
   $("#accountUsername").textContent = state.user.username;
   $("#accountAvatar").textContent = state.user.username.slice(0, 1) || "?";
   $("#accountRole").textContent = state.user.is_admin ? "Administrateur" : "Utilisateur";
@@ -419,51 +432,27 @@ function renderState(state, dashboardItems = { items: [] }) {
   $("#status").textContent = bits.join(" · ");
   $("#status").classList.toggle("error", Boolean(runtime.last_error));
 
+  const activeSearches = state.searches.filter((search) => search.enabled).length;
+  $("#dashboardActiveSearches").textContent = String(activeSearches);
+  $("#dashboardTotalSearches").textContent = String(state.searches.length);
+  $("#dashboardLastCheck").textContent = runtime.last_check_finished_at
+    ? relativeTime(runtime.last_check_finished_at)
+    : "Jamais";
+  const telegramReady = Boolean(settings.telegram_bot_token && settings.telegram_chat_id);
+  $("#dashboardTelegramStatus").textContent = telegramReady ? "Operationnelles" : "A configurer";
+  $("#dashboardTelegramStatus").dataset.tone = telegramReady ? "success" : "warning";
+
   const searches = $("#searches");
   if (!state.searches.length) {
-    searches.innerHTML = '<p class="empty">Aucune recherche pour le moment.</p>';
+    searches.innerHTML = `
+      <div class="emptyState">
+        <span class="emptyStateIcon iconGlyph iconSearch" aria-hidden="true"></span>
+        <h3>Aucune recherche pour le moment</h3>
+        <p>Ajoute ta premiere recherche pour commencer a recevoir de nouvelles annonces.</p>
+      </div>
+    `;
     return;
   }
-
-  searches.innerHTML = state.searches
-    .map((search) => `
-      <div class="row">
-        <div>
-          <strong>${escapeHtml(search.name)}</strong>
-          <span>${escapeHtml(search.url)}</span>
-          <small>
-            ${search.enabled ? "Active" : "Pause"} · toutes les ${search.interval_seconds}s
-            ${search.last_checked_at ? ` · dernier check ${escapeHtml(search.last_checked_at)}` : ""}
-            ${search.last_error ? ` · erreur ${escapeHtml(search.last_error)}` : ""}
-          </small>
-        </div>
-        <div class="rowActions">
-          <button data-edit="${search.id}">Modifier</button>
-          <button data-toggle="${search.id}">${search.enabled ? "Pause" : "Activer"}</button>
-          <button data-delete="${search.id}" class="danger">Supprimer</button>
-        </div>
-        <form class="editForm" data-edit-form="${search.id}" hidden>
-          <label>
-            Nom
-            <input name="name" value="${escapeAttr(search.name)}" required />
-          </label>
-          <label>
-            URL Vinted
-            <input name="url" value="${escapeAttr(search.url)}" required />
-          </label>
-          <label>
-            Intervalle en secondes
-            <input name="interval_seconds" type="number" min="60" value="${search.interval_seconds}" />
-          </label>
-          <div class="actions">
-            <button type="submit">Sauvegarder</button>
-            <button type="button" data-cancel-edit="${search.id}">Annuler</button>
-          </div>
-          <small data-edit-error="${search.id}"></small>
-        </form>
-      </div>
-    `)
-    .join("");
 
   renderDashboardSearches(searches, state.searches, dashboardItems.items || []);
 
@@ -844,10 +833,8 @@ $("#loginForm").addEventListener("submit", async (event) => {
   const error = $("#loginError");
   error.textContent = "";
   try {
-    const login = await api("/api/login", { method: "POST", body: JSON.stringify(formData(event.target)) });
-    if (login.token) {
-      localStorage.setItem("vinted_session_token", login.token);
-    }
+    await api("/api/login", { method: "POST", body: JSON.stringify(formData(event.target)) });
+    localStorage.removeItem("vinted_session_token");
     event.target.password.value = "";
     await loadState();
   } catch (exception) {
@@ -936,6 +923,23 @@ $("#settingsForm").addEventListener("submit", async (event) => {
     await api("/api/settings", { method: "POST", body: JSON.stringify(formData(event.target)) });
     event.target.reset();
     showTelegramHelp("Paramètres Telegram enregistrés.");
+    await loadState();
+  } catch (error) {
+    showTelegramHelp(error.message, true);
+  }
+});
+
+$("#clearTelegram").addEventListener("click", async () => {
+  if (!window.confirm("Effacer le token Telegram et le Chat ID ?")) return;
+  try {
+    await api("/api/settings", {
+      method: "POST",
+      body: JSON.stringify({ clear_telegram_settings: true }),
+    });
+    $("#settingsForm").reset();
+    $('[name="telegram_bot_token"]').placeholder = "123456:ABC...";
+    $('[name="telegram_chat_id"]').placeholder = "123456789";
+    showTelegramHelp("Configuration Telegram effacee.");
     await loadState();
   } catch (error) {
     showTelegramHelp(error.message, true);

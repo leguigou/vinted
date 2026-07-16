@@ -22,7 +22,7 @@ python app.py
 
 Tu peux aussi lancer l'application avec `start.bat` sous Windows.
 
-Par defaut, le compte admin est `admin` / `admin123`. Si `VINTED_ALERTS_ADMIN_PASSWORD` est definie au demarrage, elle cree ou remet a jour le mot de passe du compte admin cible.
+En ecoute locale uniquement, le compte admin initial est `admin` / `admin123`. Change ce mot de passe des la premiere connexion. L'application refuse de demarrer sur une adresse publique avec ce mot de passe par defaut. Si `VINTED_ALERTS_ADMIN_PASSWORD` est definie au demarrage, elle cree ou remet a jour le mot de passe du compte admin cible.
 
 ## Installation comme application PWA
 
@@ -37,10 +37,23 @@ La PWA garde l'interface en cache pour demarrer plus vite, mais les appels `/api
 ## Lancement avec Docker
 
 ```powershell
+$env:VINTED_ALERTS_ADMIN_PASSWORD = "un-mot-de-passe-long-et-unique"
 docker compose up --build
 ```
 
-L'interface sera disponible sur http://127.0.0.1:8790.
+L'interface sera disponible sur http://127.0.0.1:8787.
+
+Tu peux aussi creer un fichier `.env` a cote de `docker-compose.yml` :
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Puis remplace le mot de passe dans ce fichier :
+
+```text
+VINTED_ALERTS_ADMIN_PASSWORD=un-mot-de-passe-long-et-unique
+```
 
 Variables d'environnement utiles :
 
@@ -49,9 +62,15 @@ Variables d'environnement utiles :
 - `VINTED_ALERTS_DB_PATH` : chemin de la base SQLite.
 - `VINTED_ALERTS_ADMIN_USERNAME` : utilisateur admin cible, par defaut `admin`.
 - `VINTED_ALERTS_ADMIN_PASSWORD` : mot de passe admin. Si la variable est definie, elle est appliquee au demarrage.
+- `VINTED_ALERTS_SESSION_TTL_SECONDS` : duree maximale d'une session, `604800` secondes (7 jours) par defaut.
+- `VINTED_ALERTS_SECURE_COOKIE` : mets `true` lorsque l'application est accessible derriere une URL HTTPS.
+- `VINTED_ALERTS_MAX_JSON_BODY_BYTES` : taille maximale d'un corps JSON, `65536` octets par defaut.
+- `VINTED_ALERTS_LOGIN_ATTEMPT_LIMIT` : nombre maximal d'echecs de connexion dans la fenetre de limitation, `5` par defaut.
+- `VINTED_ALERTS_LOGIN_ATTEMPT_WINDOW_SECONDS` : fenetre de limitation des connexions, `300` secondes par defaut.
 - `VINTED_ALERTS_FETCH_API_ENABLED` : active l'appel a une API distante pour les requetes Vinted (`true`, `1`, `yes` ou `on`).
 - `VINTED_ALERTS_FETCH_API_URL` : URL du service API de fetch, par exemple `https://maison.example.com:8797`.
 - `VINTED_ALERTS_FETCH_API_TOKEN` : token Bearer partage avec le service API de fetch. `VINTED_FETCH_API_TOKEN` est aussi accepte comme alias cote extranet.
+- `VINTED_FETCH_API_MAX_JSON_BODY_BYTES` : taille maximale d'une requete recue par l'API de fetch, `16384` octets par defaut.
 
 ## API de fetch Vinted separee
 
@@ -185,3 +204,9 @@ L'application garde en base les articles deja vus pour eviter les doublons.
 - Evite les intervalles trop courts. Une verification toutes les 2 a 5 minutes est plus raisonnable.
 - Dans les parametres, `Aleatoire de verification` ajoute jusqu'a ce pourcentage de delai en plus de l'intervalle defini, par tranches de 5 %, avec `5 %` par defaut.
 - Si Vinted change son API ou bloque les requetes automatisees, l'interface affichera l'erreur dans la recherche concernee.
+
+## Tests
+
+```powershell
+python -m unittest discover -v
+```

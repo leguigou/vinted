@@ -18,6 +18,7 @@ HOST = os.environ.get("VINTED_FETCH_API_HOST", "127.0.0.1")
 PORT = int(os.environ.get("VINTED_FETCH_API_PORT", "8797"))
 ACCESS_TOKEN = os.environ.get("VINTED_FETCH_API_TOKEN", "")
 LOG_PATH = Path(os.environ.get("VINTED_FETCH_API_LOG_PATH", ROOT / "fetch-api.log"))
+MAX_JSON_BODY_BYTES = max(1024, int(os.environ.get("VINTED_FETCH_API_MAX_JSON_BODY_BYTES", "16384")))
 
 
 def log_event(message: str) -> None:
@@ -100,10 +101,20 @@ class FetchApiHandler(BaseHTTPRequestHandler):
             raise PermissionError("Token API invalide.")
 
     def read_json(self) -> dict:
-        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise RuntimeError("Content-Length invalide.") from exc
+        if length < 0 or length > MAX_JSON_BODY_BYTES:
+            raise RuntimeError(
+                f"Requete trop volumineuse (maximum {MAX_JSON_BODY_BYTES} octets)."
+            )
         if length == 0:
             return {}
-        return json.loads(self.rfile.read(length).decode("utf-8"))
+        payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise RuntimeError("Le corps JSON doit etre un objet.")
+        return payload
 
     def send_json(self, payload: dict, status: int = 200) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")

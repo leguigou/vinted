@@ -6,3 +6,6 @@ __pycache__/
 .gitignore
 vinted_alerts.db
 server*.log
+.env
+fetch-api.env
+fetch-api.log

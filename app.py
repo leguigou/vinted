@@ -10,7 +10,6 @@ import hmac
 import re
 import threading
 import time
-import traceback
 import http.cookiejar
 import urllib.error
 import urllib.parse
@@ -32,6 +31,19 @@ ADMIN_USERNAME = os.environ.get("VINTED_ALERTS_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD_ENV = os.environ.get("VINTED_ALERTS_ADMIN_PASSWORD")
 ADMIN_PASSWORD = ADMIN_PASSWORD_ENV or "admin123"
 SESSION_COOKIE = "vinted_session"
+SESSION_TTL_SECONDS = max(300, int(os.environ.get("VINTED_ALERTS_SESSION_TTL_SECONDS", "604800")))
+SECURE_COOKIE = os.environ.get("VINTED_ALERTS_SECURE_COOKIE", "").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+MAX_JSON_BODY_BYTES = max(1024, int(os.environ.get("VINTED_ALERTS_MAX_JSON_BODY_BYTES", "65536")))
+LOGIN_ATTEMPT_LIMIT = max(1, int(os.environ.get("VINTED_ALERTS_LOGIN_ATTEMPT_LIMIT", "5")))
+LOGIN_ATTEMPT_WINDOW_SECONDS = max(
+    30,
+    int(os.environ.get("VINTED_ALERTS_LOGIN_ATTEMPT_WINDOW_SECONDS", "300")),
+)
 FETCH_API_ENABLED = os.environ.get("VINTED_ALERTS_FETCH_API_ENABLED", "").lower() in {
     "1",
     "true",
@@ -63,12 +75,17 @@ VINTED_HEADERS = {
 
 
 state_lock = threading.Lock()
+check_lock = threading.Lock()
 worker_stop = threading.Event()
+worker_wakeup = threading.Event()
 worker_thread: threading.Thread | None = None
 last_check_started_at: str | None = None
 last_check_finished_at: str | None = None
 last_error: str | None = None
 initialized_search_ids: set[int] = set()
+next_check_at: dict[int, float] = {}
+login_attempts: dict[str, list[float]] = {}
+login_attempts_lock = threading.Lock()
 vinted_lock = threading.Lock()
 vinted_cookie_jar = http.cookiejar.CookieJar()
 
@@ -88,8 +105,10 @@ def now_iso() -> str:
 
 
 def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("pragma foreign_keys = on")
+    conn.execute("pragma busy_timeout = 30000")
     return conn
 
 
@@ -131,14 +150,29 @@ def get_session_user(token: str) -> dict | None:
     with db() as conn:
         row = conn.execute(
             """
-            select u.id, u.username, u.is_admin
+            select u.id, u.username, u.is_admin, s.created_at as session_created_at
             from sessions s
             join users u on u.id = s.user_id
             where s.token = ?
             """,
             (token,),
         ).fetchone()
-    return dict(row) if row else None
+        if row and session_is_expired(row["session_created_at"]):
+            conn.execute("delete from sessions where token = ?", (token,))
+            return None
+    if not row:
+        return None
+    user = dict(row)
+    user.pop("session_created_at", None)
+    return user
+
+
+def session_is_expired(created_at: str) -> bool:
+    try:
+        created_timestamp = time.mktime(time.strptime(created_at, "%Y-%m-%d %H:%M:%S"))
+    except (TypeError, ValueError, OverflowError):
+        return True
+    return time.time() - created_timestamp >= SESSION_TTL_SECONDS
 
 
 def delete_session(token: str) -> None:
@@ -344,6 +378,17 @@ def set_setting(user_id: int, key: str, value: str) -> None:
         )
 
 
+def delete_settings(user_id: int, keys: tuple[str, ...]) -> None:
+    if not keys:
+        return
+    placeholders = ",".join("?" for _ in keys)
+    with db() as conn:
+        conn.execute(
+            f"delete from settings where user_id = ? and key in ({placeholders})",
+            (user_id, *keys),
+        )
+
+
 def normalize_random_interval_percent(value: object) -> int:
     try:
         percent = int(value)
@@ -414,6 +459,16 @@ def search_url_to_api_url(url: str) -> str:
     api_params.setdefault("order", "newest_first")
     encoded = urllib.parse.urlencode(api_params)
     return f"https://www.vinted.fr/api/v2/catalog/items?{encoded}"
+
+
+def is_allowed_vinted_search_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url.strip())
+    hostname = (parsed.hostname or "").lower()
+    return (
+        parsed.scheme == "https"
+        and (hostname == "vinted.fr" or hostname.endswith(".vinted.fr"))
+        and parsed.path.startswith(("/catalog", "/api/v2/catalog/items"))
+    )
 
 
 def reset_vinted_session() -> None:
@@ -798,69 +853,101 @@ def run_checks_once(
     notify: bool = True,
     user_id: int | None = None,
     raise_on_error: bool = False,
+    search_ids: set[int] | None = None,
 ) -> int:
     global last_check_started_at, last_check_finished_at, last_error
 
+    with check_lock:
+        with state_lock:
+            last_check_started_at = now_iso()
+            last_error = None
+
+        total = 0
+        errors: list[Exception] = []
+        try:
+            with db() as conn:
+                params: tuple = ()
+                user_filter = ""
+                if user_id is not None:
+                    user_filter = "and user_id = ?"
+                    params = (user_id,)
+                rows = conn.execute(
+                    f"select * from searches where enabled = 1 {user_filter} order by id asc",
+                    params,
+                ).fetchall()
+
+            for search in rows:
+                search_id = int(search["id"])
+                if search_ids is not None and search_id not in search_ids:
+                    continue
+                try:
+                    total += check_search(search, notify=notify)
+                except Exception as exc:
+                    errors.append(exc)
+                    with db() as conn:
+                        conn.execute(
+                            "update searches set last_error = ? where id = ?",
+                            (str(exc), search_id),
+                        )
+                    print(f"[{now_iso()}] Recherche {search_id} en erreur: {exc}")
+                finally:
+                    schedule_next_check(search)
+        except Exception as exc:
+            errors.append(exc)
+            print(f"[{now_iso()}] Verification impossible: {exc}")
+
+        with state_lock:
+            last_error = " | ".join(str(error) for error in errors) or None
+            last_check_finished_at = now_iso()
+
+        if errors and raise_on_error:
+            raise errors[0]
+        return total
+
+
+def schedule_next_check(search: sqlite3.Row | dict, from_time: float | None = None) -> float:
+    interval = max(int(search["interval_seconds"]), 60)
+    jitter_percent = get_random_interval_percent(int(search["user_id"]))
+    jitter = random.randint(0, max(0, round(interval * jitter_percent / 100)))
+    due_at = (from_time if from_time is not None else time.time()) + interval + jitter
     with state_lock:
-        last_check_started_at = now_iso()
-        last_error = None
+        next_check_at[int(search["id"])] = due_at
+    return due_at
 
-    total = 0
-    try:
-        with db() as conn:
-            params: tuple = ()
-            user_filter = ""
-            if user_id is not None:
-                user_filter = "and user_id = ?"
-                params = (user_id,)
-            rows = conn.execute(
-                f"select * from searches where enabled = 1 {user_filter} order by id asc",
-                params,
-            ).fetchall()
 
-        for search in rows:
-            try:
-                total += check_search(search, notify=notify)
-            except Exception as exc:
-                with db() as conn:
-                    conn.execute(
-                        "update searches set last_error = ? where id = ?",
-                        (str(exc), search["id"]),
-                    )
-                raise
-
-        with state_lock:
-            last_check_finished_at = now_iso()
-        return total
-    except Exception as exc:
-        with state_lock:
-            last_error = str(exc)
-            last_check_finished_at = now_iso()
-        if raise_on_error:
-            raise
-        traceback.print_exc()
-        return total
+def schedule_search_by_id(search_id: int) -> None:
+    with db() as conn:
+        search = conn.execute("select * from searches where id = ?", (search_id,)).fetchone()
+    if search and search["enabled"]:
+        schedule_next_check(search)
+    worker_wakeup.set()
 
 
 def worker_loop() -> None:
     while not worker_stop.is_set():
-        interval = DEFAULT_INTERVAL_SECONDS
         searches = list_searches()
         enabled_searches = [search for search in searches if search["enabled"]]
-        if enabled_searches:
-            interval = min(
-                max(int(search["interval_seconds"]), 60)
-                for search in enabled_searches
-            )
-            jitter_percent = max(
-                get_random_interval_percent(int(search["user_id"]))
-                for search in enabled_searches
-            )
-            if jitter_percent:
-                interval += random.randint(0, max(0, round(interval * jitter_percent / 100)))
+        enabled_ids = {int(search["id"]) for search in enabled_searches}
+        now = time.time()
+        with state_lock:
+            for search_id in list(next_check_at):
+                if search_id not in enabled_ids:
+                    next_check_at.pop(search_id, None)
+            due_ids = {
+                search_id
+                for search_id in enabled_ids
+                if next_check_at.get(search_id, 0) <= now
+            }
 
-        run_checks_once(notify=True)
-        worker_stop.wait(interval)
+        if due_ids:
+            run_checks_once(notify=True, search_ids=due_ids)
+            continue
+
+        with state_lock:
+            upcoming = [next_check_at[search_id] for search_id in enabled_ids if search_id in next_check_at]
+        wait_seconds = min(max(1.0, min(upcoming) - now), 60.0) if upcoming else 60.0
+        worker_wakeup.wait(wait_seconds)
+        worker_wakeup.clear()
 
 
 def start_worker() -> None:
@@ -869,6 +956,42 @@ def start_worker() -> None:
         return
     worker_thread = threading.Thread(target=worker_loop, daemon=True)
     worker_thread.start()
+
+
+class RequestTooLargeError(RuntimeError):
+    pass
+
+
+class AuthenticationError(RuntimeError):
+    pass
+
+
+class AuthorizationError(RuntimeError):
+    pass
+
+
+def login_is_rate_limited(client_ip: str) -> bool:
+    cutoff = time.monotonic() - LOGIN_ATTEMPT_WINDOW_SECONDS
+    with login_attempts_lock:
+        recent = [attempt for attempt in login_attempts.get(client_ip, []) if attempt >= cutoff]
+        if recent:
+            login_attempts[client_ip] = recent
+        else:
+            login_attempts.pop(client_ip, None)
+        return len(recent) >= LOGIN_ATTEMPT_LIMIT
+
+
+def record_login_failure(client_ip: str) -> None:
+    cutoff = time.monotonic() - LOGIN_ATTEMPT_WINDOW_SECONDS
+    with login_attempts_lock:
+        recent = [attempt for attempt in login_attempts.get(client_ip, []) if attempt >= cutoff]
+        recent.append(time.monotonic())
+        login_attempts[client_ip] = recent
+
+
+def clear_login_failures(client_ip: str) -> None:
+    with login_attempts_lock:
+        login_attempts.pop(client_ip, None)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -916,8 +1039,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(price_analytics(user["id"]))
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
-        except PermissionError as exc:
+        except AuthenticationError as exc:
             self.send_json({"ok": False, "authenticated": False, "error": str(exc)}, status=401)
+        except AuthorizationError as exc:
+            self.send_json({"ok": False, "authenticated": True, "error": str(exc)}, status=403)
         except Exception as exc:
             self.send_json({"ok": False, "error": str(exc)}, status=400)
 
@@ -926,12 +1051,21 @@ class Handler(BaseHTTPRequestHandler):
         try:
             payload = self.read_json()
             if parsed.path == "/api/login":
+                client_ip = self.client_address[0]
+                if login_is_rate_limited(client_ip):
+                    self.send_json(
+                        {"ok": False, "error": "Trop de tentatives. Reessaie dans quelques minutes."},
+                        status=429,
+                    )
+                    return
                 user = authenticate(
                     str(payload.get("username", "")).strip(),
                     str(payload.get("password", "")),
                 )
                 if not user:
-                    raise RuntimeError("Identifiants invalides.")
+                    record_login_failure(client_ip)
+                    raise AuthenticationError("Identifiants invalides.")
+                clear_login_failures(client_ip)
                 token = create_session(user["id"])
                 self.send_json(
                     {
@@ -959,13 +1093,13 @@ class Handler(BaseHTTPRequestHandler):
             elif parsed.path == "/api/users":
                 user = self.require_user()
                 if not user["is_admin"]:
-                    raise PermissionError("Accès admin requis.")
+                    raise AuthorizationError("Accès admin requis.")
                 create_user(payload)
                 self.send_json({"ok": True})
             elif parsed.path.startswith("/api/users/"):
                 user = self.require_user()
                 if not user["is_admin"]:
-                    raise PermissionError("Accès admin requis.")
+                    raise AuthorizationError("Accès admin requis.")
                 self.update_user(parsed.path, payload)
             elif parsed.path.startswith("/api/searches/"):
                 user = self.require_user()
@@ -980,8 +1114,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True})
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
-        except PermissionError as exc:
+        except RequestTooLargeError as exc:
+            self.send_json({"ok": False, "error": str(exc)}, status=413)
+        except AuthenticationError as exc:
             self.send_json({"ok": False, "authenticated": False, "error": str(exc)}, status=401)
+        except AuthorizationError as exc:
+            self.send_json({"ok": False, "authenticated": True, "error": str(exc)}, status=403)
         except Exception as exc:
             self.send_json({"ok": False, "error": str(exc)}, status=400)
 
@@ -993,6 +1131,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
+        self.send_security_headers()
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -1002,6 +1141,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        self.send_security_headers()
         self.send_header("Content-Length", str(len(data)))
         for key, value in (headers or {}).items():
             self.send_header(key, value)
@@ -1009,10 +1149,22 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def read_json(self) -> dict:
-        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise RuntimeError("Content-Length invalide.") from exc
+        if length < 0:
+            raise RuntimeError("Content-Length invalide.")
+        if length > MAX_JSON_BODY_BYTES:
+            raise RequestTooLargeError(
+                f"Requete trop volumineuse (maximum {MAX_JSON_BODY_BYTES} octets)."
+            )
         if length == 0:
             return {}
-        return json.loads(self.rfile.read(length).decode("utf-8"))
+        payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise RuntimeError("Le corps JSON doit etre un objet.")
+        return payload
 
     def session_token(self) -> str:
         authorization = self.headers.get("Authorization", "")
@@ -1035,12 +1187,25 @@ class Handler(BaseHTTPRequestHandler):
         ]
         if expires:
             bits.append("Max-Age=0")
+        if SECURE_COOKIE:
+            bits.append("Secure")
         return "; ".join(bits)
+
+    def send_security_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; "
+            "form-action 'self'",
+        )
 
     def require_user(self) -> dict:
         user = get_session_user(self.session_token())
         if not user:
-            raise PermissionError("Connexion requise.")
+            raise AuthenticationError("Connexion requise.")
         return user
 
     def update_search(self, user: dict, path: str, payload: dict) -> None:
@@ -1053,12 +1218,24 @@ class Handler(BaseHTTPRequestHandler):
                     "update searches set enabled = 1 - enabled where id = ? and user_id = ?",
                     (search_id, user["id"]),
                 )
+                row = conn.execute(
+                    "select enabled from searches where id = ? and user_id = ?",
+                    (search_id, user["id"]),
+                ).fetchone()
+            with state_lock:
+                if row and row["enabled"]:
+                    next_check_at[search_id] = 0
+                else:
+                    next_check_at.pop(search_id, None)
+            worker_wakeup.set()
             self.send_json({"ok": True})
         elif action == "delete":
             with db() as conn:
                 conn.execute("delete from searches where id = ? and user_id = ?", (search_id, user["id"]))
             with state_lock:
                 initialized_search_ids.discard(search_id)
+                next_check_at.pop(search_id, None)
+            worker_wakeup.set()
             self.send_json({"ok": True})
         elif action == "save":
             update_search_settings(user["id"], search_id, payload)
@@ -1202,6 +1379,9 @@ def authenticate(username: str, password: str) -> dict | None:
 
 
 def save_settings(user_id: int, payload: dict) -> None:
+    if payload.get("clear_telegram_settings"):
+        delete_settings(user_id, ("telegram_bot_token", "telegram_chat_id"))
+        return
     token = str(payload.get("telegram_bot_token", "")).strip()
     chat_id = str(payload.get("telegram_chat_id", "")).strip()
     if token:
@@ -1221,7 +1401,7 @@ def create_search(user_id: int, payload: dict) -> None:
     interval = int(payload.get("interval_seconds") or DEFAULT_INTERVAL_SECONDS)
     if not name:
         raise RuntimeError("Nom de recherche obligatoire.")
-    if "vinted." not in url and "/api/v2/catalog/items" not in url:
+    if not is_allowed_vinted_search_url(url):
         raise RuntimeError("Colle une URL de recherche Vinted valide.")
     if interval < 60:
         raise RuntimeError("Intervalle minimum: 60 secondes.")
@@ -1243,6 +1423,8 @@ def create_search(user_id: int, payload: dict) -> None:
                 "update searches set last_error = ? where id = ?",
                 (f"Recherche ajoutée, mais initialisation impossible: {exc}", search_id),
             )
+    finally:
+        schedule_search_by_id(int(search_id))
 
 
 def update_search_settings(user_id: int, search_id: int, payload: dict) -> None:
@@ -1251,7 +1433,7 @@ def update_search_settings(user_id: int, search_id: int, payload: dict) -> None:
     interval = int(payload.get("interval_seconds") or DEFAULT_INTERVAL_SECONDS)
     if not name:
         raise RuntimeError("Nom de recherche obligatoire.")
-    if "vinted." not in url and "/api/v2/catalog/items" not in url:
+    if not is_allowed_vinted_search_url(url):
         raise RuntimeError("Colle une URL de recherche Vinted valide.")
     if interval < 60:
         raise RuntimeError("Intervalle minimum: 60 secondes.")
@@ -1279,6 +1461,7 @@ def update_search_settings(user_id: int, search_id: int, payload: dict) -> None:
         with state_lock:
             initialized_search_ids.discard(search_id)
         seed_seen_items(search_id, url)
+    schedule_search_by_id(search_id)
 
 
 def seed_seen_items(search_id: int, url: str) -> None:
@@ -1534,7 +1717,22 @@ def price_analytics(user_id: int) -> dict:
     return {"searches": searches, "best_deals": best_deals[:10]}
 
 
+def validate_configuration() -> None:
+    is_loopback = HOST.lower() in {"127.0.0.1", "localhost", "::1"}
+    if not is_loopback and ADMIN_PASSWORD == "admin123":
+        raise SystemExit(
+            "Refus de demarrer sur une adresse publique avec le mot de passe admin par defaut. "
+            "Definis VINTED_ALERTS_ADMIN_PASSWORD avec un mot de passe fort."
+        )
+    if not is_loopback and not SECURE_COOKIE:
+        print(
+            "AVERTISSEMENT: active VINTED_ALERTS_SECURE_COOKIE=true lorsque l'application "
+            "est servie en HTTPS."
+        )
+
+
 def main() -> None:
+    validate_configuration()
     init_db()
     start_worker()
     server = ThreadingHTTPServer((HOST, PORT), Handler)

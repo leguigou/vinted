@@ -12,13 +12,19 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="stylesheet" href="/styles.css?v=1.0.37" />
+    <link rel="stylesheet" href="/styles.css?v=1.0.40" />
   </head>
   <body>
     <main id="loginShell" class="shell authShell">
       <div class="authStack">
         <section class="panel authPanel">
-          <h1>Vinted Alerts</h1>
+          <div class="authBrand">
+            <img src="/icon.svg" alt="" />
+            <div>
+              <span>Veille personnelle</span>
+              <h1>Vinted Alerts</h1>
+            </div>
+          </div>
           <p>Connecte-toi pour acceder a tes recherches et a ton bot Telegram.</p>
           <form id="loginForm" class="stack">
             <label>
@@ -33,7 +39,7 @@
             <div id="loginError" class="help error"></div>
           </form>
         </section>
-        <small class="appVersion">Version 1.0.34</small>
+        <small class="appVersion">Version 1.0.40</small>
       </div>
     </main>
 
@@ -44,14 +50,14 @@
           <span></span>
           <span></span>
         </button>
-        <strong>Vinted Alerts</strong>
-        <button id="mobileCheckNow" class="primary checkNowButton mobileCheckNow" type="button">Verifier maintenant</button>
+        <span class="mobileBrand"><img src="/icon.svg" alt="" /><strong>Vinted Alerts</strong></span>
+        <button id="mobileCheckNow" class="primary checkNowButton mobileCheckNow" type="button">Verifier</button>
       </header>
       <div id="menuBackdrop" class="menuBackdrop" hidden></div>
 
       <aside id="sideMenu" class="sideMenu" aria-label="Menu principal">
         <div class="sideBrand">
-          <span class="brandIcon iconGlyph iconBell" aria-hidden="true"></span>
+          <img class="brandLogo" src="/icon.svg" alt="" />
           <strong>Vinted Alerts</strong>
           <button id="menuToggle" class="iconButton" type="button" aria-label="Menu" aria-expanded="true" aria-controls="sideMenu">
             <span></span>
@@ -62,7 +68,7 @@
         <nav class="sideNav" aria-label="Navigation principale">
           <button class="navItem active" type="button" data-view="searches">
             <span class="navIcon iconGlyph iconDashboard" aria-hidden="true"></span>
-            <span class="navText">Dashboard</span>
+            <span class="navText">Tableau de bord</span>
           </button>
           <button class="navItem" type="button" data-view="new-search">
             <span class="navIcon iconGlyph iconPlus" aria-hidden="true"></span>
@@ -94,7 +100,7 @@
             <span id="sideUserAvatar" class="userAvatar">?</span>
             <span class="sideUserMeta">
               <strong id="sideCurrentUser">Active User</strong>
-              <small>Pro Plan</small>
+              <small id="sideUserRole">Compte utilisateur</small>
             </span>
           </button>
           <button id="sideLogout" class="powerButton" type="button" aria-label="Deconnexion">
@@ -107,7 +113,7 @@
         <header class="topbar">
           <div>
             <h1 id="viewTitle">Recherches actives</h1>
-            <p>Surveillance locale de recherches Vinted avec notifications Telegram.</p>
+            <p id="viewDescription">L'essentiel de tes recherches, alertes et opportunites.</p>
           </div>
           <div class="topActions">
             <div class="userBadge" title="Utilisateur connecte">
@@ -227,6 +233,7 @@
               <button type="submit">Enregistrer</button>
               <button type="button" id="findChat">Trouver mon Chat ID</button>
               <button type="button" id="testTelegram">Tester</button>
+              <button type="button" id="clearTelegram" class="danger">Effacer</button>
             </div>
           </form>
           <div id="telegramHelp" class="help"></div>
@@ -300,8 +307,39 @@
         </section>
 
         <section class="panel viewPanel active" data-panel="searches">
+          <div class="dashboardOverview">
+            <div class="dashboardIntro">
+              <div>
+                <span class="eyebrow">Vue d'ensemble</span>
+                <h2>Ta veille en un coup d'oeil</h2>
+                <p>Surveille les nouvelles annonces et repere rapidement les meilleures opportunites.</p>
+              </div>
+              <button class="primary" type="button" data-view="new-search">
+                <span class="iconGlyph iconPlus" aria-hidden="true"></span>
+                Ajouter une recherche
+              </button>
+            </div>
+            <div class="dashboardStats" aria-label="Resume de la surveillance">
+              <article class="statCard statCardPrimary">
+                <span class="statIcon iconGlyph iconDashboard" aria-hidden="true"></span>
+                <div><small>Recherches actives</small><strong id="dashboardActiveSearches">0</strong></div>
+              </article>
+              <article class="statCard">
+                <span class="statIcon iconGlyph iconSearch" aria-hidden="true"></span>
+                <div><small>Total des recherches</small><strong id="dashboardTotalSearches">0</strong></div>
+              </article>
+              <article class="statCard">
+                <span class="statIcon iconGlyph iconHistory" aria-hidden="true"></span>
+                <div><small>Derniere verification</small><strong id="dashboardLastCheck">Jamais</strong></div>
+              </article>
+              <article class="statCard">
+                <span class="statIcon iconGlyph iconSend" aria-hidden="true"></span>
+                <div><small>Notifications Telegram</small><strong id="dashboardTelegramStatus">A configurer</strong></div>
+              </article>
+            </div>
+          </div>
           <div class="sectionTitle">
-            <h2>Recherches actives</h2>
+            <h3>Mes recherches</h3>
             <span id="status" class="muted"></span>
           </div>
           <div id="searches" class="list"></div>
@@ -332,15 +370,11 @@
       <nav class="bottomNav" aria-label="Navigation mobile">
         <button class="bottomNavItem active" type="button" data-view="searches">
           <span class="bottomIconPill"><span class="iconGlyph iconHome" aria-hidden="true"></span></span>
-          <span>Home</span>
+          <span>Accueil</span>
         </button>
         <button class="bottomNavItem" type="button" data-view="new-search">
           <span class="bottomIconPill"><span class="iconGlyph iconSearch" aria-hidden="true"></span></span>
-          <span>Searches</span>
-        </button>
-        <button class="bottomNavItem" type="button" data-view="account">
-          <span class="bottomIconPill"><span class="iconGlyph iconUser" aria-hidden="true"></span></span>
-          <span>Account</span>
+          <span>Ajouter</span>
         </button>
         <button class="bottomNavItem" type="button" data-view="items">
           <span class="bottomIconPill"><span class="iconGlyph iconBell" aria-hidden="true"></span></span>
@@ -353,6 +387,6 @@
       </nav>
     </main>
 
-    <script src="/app.js?v=1.0.38"></script>
+    <script src="/app.js?v=1.0.40"></script>
   </body>
 </html>
