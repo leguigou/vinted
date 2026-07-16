@@ -12,7 +12,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="stylesheet" href="/styles.css?v=1.0.42" />
+    <link rel="stylesheet" href="/styles.css?v=1.0.44" />
   </head>
   <body>
     <main id="loginShell" class="shell authShell">
@@ -39,7 +39,7 @@
             <div id="loginError" class="help error"></div>
           </form>
         </section>
-        <small class="appVersion">Version 1.0.42</small>
+        <small class="appVersion">Version 1.0.44</small>
       </div>
     </main>
 
@@ -51,7 +51,7 @@
           <span></span>
         </button>
         <span class="mobileBrand"><img src="/icon.svg" alt="" /><strong>Vinted Alerts</strong></span>
-        <button id="mobileCheckNow" class="primary checkNowButton mobileCheckNow" type="button">Verifier</button>
+        <button id="mobileCheckNow" class="primary checkNowButton mobileCheckNow" type="button" title="Verifier toutes les recherches, y compris celles en pause">Verifier</button>
       </header>
       <div id="menuBackdrop" class="menuBackdrop" hidden></div>
 
@@ -66,9 +66,13 @@
           </button>
         </div>
         <nav class="sideNav" aria-label="Navigation principale">
-          <button class="navItem active" type="button" data-view="searches">
+          <button class="navItem active" type="button" data-view="dashboard">
             <span class="navIcon iconGlyph iconDashboard" aria-hidden="true"></span>
             <span class="navText">Tableau de bord</span>
+          </button>
+          <button class="navItem" type="button" data-view="searches">
+            <span class="navIcon iconGlyph iconSearch" aria-hidden="true"></span>
+            <span class="navText">Recherches</span>
           </button>
           <button class="navItem" type="button" data-view="new-search">
             <span class="navIcon iconGlyph iconPlus" aria-hidden="true"></span>
@@ -112,7 +116,7 @@
       <section class="workspace">
         <header class="topbar">
           <div>
-            <h1 id="viewTitle">Recherches actives</h1>
+            <h1 id="viewTitle">Tableau de bord</h1>
             <p id="viewDescription">L'essentiel de tes recherches, alertes et opportunites.</p>
           </div>
           <div class="topActions">
@@ -125,7 +129,7 @@
               <span id="themeToggleText">Theme sombre</span>
             </button>
             <button id="logout" type="button">Deconnexion</button>
-            <button id="checkNow" class="primary checkNowButton" type="button">Verifier maintenant</button>
+            <button id="checkNow" class="primary checkNowButton" type="button" title="Verifier toutes les recherches, y compris celles en pause">Verifier maintenant</button>
           </div>
         </header>
 
@@ -312,7 +316,7 @@
           </form>
         </section>
 
-        <section class="panel viewPanel active" data-panel="searches">
+        <section class="panel viewPanel active" data-panel="dashboard">
           <div class="dashboardOverview">
             <div class="dashboardIntro">
               <div>
@@ -344,10 +348,17 @@
               </article>
             </div>
           </div>
-          <div class="sectionTitle">
-            <h3>Mes recherches</h3>
-            <span id="status" class="muted"></span>
+        </section>
+
+        <section class="panel viewPanel" data-panel="searches">
+          <div class="sectionTitle searchLibraryTitle">
+            <div>
+              <span class="eyebrow">Gestion et lancement manuel</span>
+              <h2>Mes recherches</h2>
+            </div>
+            <span id="status" class="muted" role="status" aria-live="polite"></span>
           </div>
+          <p class="searchLibraryHelp">Une recherche en pause ne tourne plus automatiquement, mais tu peux toujours la lancer ponctuellement avec « Rechercher maintenant ».</p>
           <div id="searches" class="list"></div>
         </section>
 
@@ -374,9 +385,13 @@
       </section>
 
       <nav class="bottomNav" aria-label="Navigation mobile">
-        <button class="bottomNavItem active" type="button" data-view="searches">
+        <button class="bottomNavItem active" type="button" data-view="dashboard">
           <span class="bottomIconPill"><span class="iconGlyph iconHome" aria-hidden="true"></span></span>
           <span>Accueil</span>
+        </button>
+        <button class="bottomNavItem" type="button" data-view="searches">
+          <span class="bottomIconPill"><span class="iconGlyph iconSearch" aria-hidden="true"></span></span>
+          <span>Recherches</span>
         </button>
         <button class="bottomNavItem" type="button" data-view="new-search">
           <span class="bottomIconPill"><span class="iconGlyph iconSearch" aria-hidden="true"></span></span>
@@ -393,6 +408,6 @@
       </nav>
     </main>
 
-    <script src="/app.js?v=1.0.42"></script>
+    <script src="/app.js?v=1.0.44"></script>
   </body>
 </html>

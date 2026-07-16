@@ -8,7 +8,8 @@ const VIEW_TITLES = {
   telegram: "Telegram",
   settings: "Parametres",
   "new-search": "Nouvelle recherche",
-  searches: "Tableau de bord",
+  dashboard: "Tableau de bord",
+  searches: "Recherches",
   items: "Historique alertes",
   prices: "Analyse prix",
 };
@@ -18,13 +19,14 @@ const VIEW_DESCRIPTIONS = {
   telegram: "Configure le bot qui recevra les nouvelles annonces.",
   settings: "Ajuste le rythme et le comportement de la surveillance.",
   "new-search": "Cree une veille a partir d'une URL ou d'une recherche rapide.",
-  searches: "L'essentiel de tes recherches, alertes et opportunites.",
+  dashboard: "L'essentiel de tes recherches, alertes et opportunites.",
+  searches: "Gere tes recherches et lance-les manuellement, meme lorsqu'elles sont en pause.",
   items: "Retrouve les annonces detectees par ordre chronologique.",
   prices: "Compare les prix et repere les annonces sous la mediane.",
 };
 let itemsPage = 1;
 let isAuthenticated = false;
-let activeView = "searches";
+let activeView = "dashboard";
 let latestState = null;
 
 function applyTheme(theme) {
@@ -382,6 +384,10 @@ function renderDashboardSearches(container, searches, items) {
             ${slider}
           </div>
           <div class="rowActions dashboardActions">
+            <button class="primary manualSearchButton" type="button" data-run-search="${search.id}">
+              <span class="iconGlyph iconSearch" aria-hidden="true"></span>
+              <span data-run-search-label>Rechercher maintenant</span>
+            </button>
             <button data-edit="${search.id}">Modifier</button>
             <button data-delete="${search.id}" class="danger">Supprimer</button>
           </div>
@@ -501,6 +507,31 @@ function renderState(state, dashboardItems = { items: [] }) {
     button.addEventListener("click", async () => {
       await api(`/api/searches/${button.dataset.toggle}/toggle`, { method: "POST", body: "{}" });
       await loadState();
+    });
+  });
+
+  searches.querySelectorAll("[data-run-search]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const label = button.querySelector("[data-run-search-label]");
+      const search = state.searches.find((entry) => String(entry.id) === button.dataset.runSearch);
+      button.disabled = true;
+      label.textContent = "Recherche en cours...";
+      try {
+        const result = await api(`/api/searches/${button.dataset.runSearch}/run`, {
+          method: "POST",
+          body: "{}",
+        });
+        await loadState();
+        const status = $("#status");
+        status.textContent = `${search?.name || "Recherche"} : ${result.new_items} nouvelle(s) annonce(s).`;
+        status.classList.remove("error");
+      } catch (error) {
+        label.textContent = "Reessayer";
+        button.disabled = false;
+        const status = $("#status");
+        status.textContent = error.message;
+        status.classList.add("error");
+      }
     });
   });
 

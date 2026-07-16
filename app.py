@@ -866,6 +866,7 @@ def run_checks_once(
     user_id: int | None = None,
     raise_on_error: bool = False,
     search_ids: set[int] | None = None,
+    include_disabled: bool = False,
 ) -> int:
     global last_check_started_at, last_check_finished_at, last_error
 
@@ -883,8 +884,10 @@ def run_checks_once(
                 if user_id is not None:
                     user_filter = "and user_id = ?"
                     params = (user_id,)
+                enabled_filter = "" if include_disabled else "and enabled = 1"
                 rows = conn.execute(
-                    "select * from searches where enabled = 1 "
+                    "select * from searches where 1 = 1 "
+                    f"{enabled_filter} "
                     "and exists(select 1 from users u where u.id = searches.user_id and u.is_active = 1) "
                     f"{user_filter} order by id asc",
                     params,
@@ -905,7 +908,11 @@ def run_checks_once(
                         )
                     print(f"[{now_iso()}] Recherche {search_id} en erreur: {exc}")
                 finally:
-                    schedule_next_check(search)
+                    if search["enabled"]:
+                        schedule_next_check(search)
+                    else:
+                        with state_lock:
+                            next_check_at.pop(search_id, None)
         except Exception as exc:
             errors.append(exc)
             print(f"[{now_iso()}] Verification impossible: {exc}")
@@ -917,6 +924,23 @@ def run_checks_once(
         if errors and raise_on_error:
             raise errors[0]
         return total
+
+
+def run_search_now(user_id: int, search_id: int) -> int:
+    with db() as conn:
+        search = conn.execute(
+            "select id from searches where id = ? and user_id = ?",
+            (search_id, user_id),
+        ).fetchone()
+    if not search:
+        raise RuntimeError("Recherche introuvable.")
+    return run_checks_once(
+        notify=True,
+        user_id=user_id,
+        raise_on_error=True,
+        search_ids={search_id},
+        include_disabled=True,
+    )
 
 
 def schedule_next_check(search: sqlite3.Row | dict, from_time: float | None = None) -> float:
@@ -1120,7 +1144,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.update_search(user, parsed.path, payload)
             elif parsed.path == "/api/check-now":
                 user = self.require_user()
-                count = run_checks_once(notify=True, user_id=user["id"], raise_on_error=True)
+                count = run_checks_once(
+                    notify=True,
+                    user_id=user["id"],
+                    raise_on_error=True,
+                    include_disabled=True,
+                )
                 self.send_json({"ok": True, "new_items": count})
             elif parsed.path == "/api/telegram/test":
                 user = self.require_user()
@@ -1254,6 +1283,9 @@ class Handler(BaseHTTPRequestHandler):
         elif action == "save":
             update_search_settings(user["id"], search_id, payload)
             self.send_json({"ok": True})
+        elif action == "run":
+            count = run_search_now(user["id"], search_id)
+            self.send_json({"ok": True, "new_items": count})
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
 

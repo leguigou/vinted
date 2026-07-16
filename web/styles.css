@@ -808,11 +808,26 @@ body[data-theme="dark"] .themeIcon::after {
   font-size: 17px;
 }
 
-[data-panel="searches"] {
+[data-panel="dashboard"] {
   border: 0;
   background: transparent;
   padding: 0;
   box-shadow: none;
+}
+
+.searchLibraryTitle {
+  align-items: flex-end;
+}
+
+.searchLibraryTitle h2 {
+  margin: 5px 0 0;
+}
+
+.searchLibraryHelp {
+  max-width: 760px;
+  margin: 8px 0 18px;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .dashboardOverview {
@@ -1515,12 +1530,13 @@ body[data-theme="dark"] .themeIcon::after {
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   padding: 13px 14px 4px;
   scroll-padding-inline: 2px;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
+  touch-action: pan-x pan-y;
 }
 
 .searchSlider::-webkit-scrollbar {
@@ -1615,6 +1631,17 @@ body[data-theme="dark"] .themeIcon::after {
 .dashboardActions {
   justify-content: flex-end;
   padding: 8px 14px 0;
+}
+
+.manualSearchButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.manualSearchButton .iconGlyph {
+  width: 15px;
+  height: 15px;
 }
 
 .items {
@@ -2193,7 +2220,7 @@ body[data-theme="dark"] .themeIcon::after {
     left: 0;
     z-index: 17;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 2px;
     min-height: 70px;
     border: 1px solid var(--line);
@@ -2216,7 +2243,7 @@ body[data-theme="dark"] .themeIcon::after {
     background: transparent;
     color: var(--muted);
     padding: 0;
-    font-size: 11px;
+    font-size: 10px;
     line-height: 1.1;
   }
 

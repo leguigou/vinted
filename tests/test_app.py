@@ -144,6 +144,27 @@ class AppTests(unittest.TestCase):
         self.assertEqual(checked_ids, [second_id])
         self.assertNotIn(first_id, checked_ids)
 
+    def test_disabled_search_can_be_run_manually_without_rescheduling(self) -> None:
+        search_id = self.add_search("manual paused")
+        with app.db() as conn:
+            conn.execute("update searches set enabled = 0 where id = ?", (search_id,))
+
+        with mock.patch.object(app, "check_search", return_value=3) as check_mock:
+            with mock.patch.object(app, "schedule_next_check") as schedule_mock:
+                count = app.run_search_now(self.admin_id(), search_id)
+
+        self.assertEqual(count, 3)
+        self.assertEqual(check_mock.call_count, 1)
+        self.assertFalse(bool(check_mock.call_args.args[0]["enabled"]))
+        schedule_mock.assert_not_called()
+        self.assertNotIn(search_id, app.next_check_at)
+
+    def test_manual_search_run_is_limited_to_its_owner(self) -> None:
+        search_id = self.add_search("private")
+        app.create_user({"username": "eve", "password": "secret12"})
+        with self.assertRaisesRegex(RuntimeError, "introuvable"):
+            app.run_search_now(self.user_id("eve"), search_id)
+
     def test_each_search_uses_its_own_interval(self) -> None:
         search = {
             "id": 42,
