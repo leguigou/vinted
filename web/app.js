@@ -583,6 +583,7 @@ function renderState(state, dashboardItems = { items: [] }) {
           method: "POST",
           body: JSON.stringify(formData(form)),
         });
+        form.hidden = true;
         await loadState();
       } catch (exception) {
         error.textContent = exception.message;
